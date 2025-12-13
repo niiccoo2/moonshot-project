@@ -5,7 +5,7 @@ import time
 # ----- MediaPipe Hands -----
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
-    max_num_hands=1,
+    max_num_hands=2,
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5
 )
@@ -23,7 +23,7 @@ if cap is None:
     raise RuntimeError("No camera found!")
 
 # ----- Finger Counting -----
-def count_fingers(hand_landmarks, handedness):
+def count_fingers_right(hand_landmarks, handedness):
     fingers = []
 
     # Thumb
@@ -36,7 +36,24 @@ def count_fingers(hand_landmarks, handedness):
     for tip in [8, 12, 16, 20]:
         fingers.append(hand_landmarks.landmark[tip].y <
                        hand_landmarks.landmark[tip - 2].y)
-        
+
+
+    return sum(fingers), fingers
+
+
+def count_fingers_left(hand_landmarks, handedness):
+    fingers = []
+
+    # Thumb
+    if handedness == "Right":
+        fingers.append(hand_landmarks.landmark[4].x < hand_landmarks.landmark[3].x)
+    else:
+        fingers.append(hand_landmarks.landmark[4].x > hand_landmarks.landmark[3].x)
+
+    # Other fingers
+    for tip in [8, 12, 16, 20]:
+        fingers.append(hand_landmarks.landmark[tip].y <
+                       hand_landmarks.landmark[tip - 2].y)
 
     return sum(fingers), fingers
 
@@ -53,18 +70,24 @@ while cap.isOpened():
 
 
     if results.multi_hand_landmarks and results.multi_handedness:
-        counts = []
+        hand_counts = {"Right": [], "Left": []}
         for lm, hd in zip(results.multi_hand_landmarks, results.multi_handedness):
-            count, fingers = count_fingers(lm, hd.classification[0].label)
-            counts.append(count)
+            label = hd.classification[0].label
+            if label == "Right":
+                count, fingers = count_fingers_right(lm, label)
+            else:
+                count, fingers = count_fingers_left(lm, label)
+            hand_counts[label].append(count)
 
             mp_drawing.draw_landmarks(
                 frame, lm, mp_hands.HAND_CONNECTIONS
             )
 
-        print("Fingers:", counts)
+        print("Fingers Right:", hand_counts["Right"])
+        print("Fingers Left:", hand_counts["Left"])
     else:
-        print("Fingers: None")
+        print("Fingers Right: None")
+        print("Fingers Left: None")
 
     cv2.imshow("best moonshot projekt...", frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
