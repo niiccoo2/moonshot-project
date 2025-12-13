@@ -24,6 +24,7 @@ Thumbs.db
 !.env.example
 !.env.test
 .venv
+__pycache__
 
 # Vite
 vite.config.js.timestamp-*
