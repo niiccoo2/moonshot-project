@@ -9,9 +9,50 @@ hands = mp_hands.Hands(
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5
 )
+
+# ----- MediaPipe Pose -----
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(
+    static_image_mode=False,
+    model_complexity=0,
+    enable_segmentation=False,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
 mp_drawing = mp.solutions.drawing_utils
 
-# def get_body_keypoints():
+def get_body_keypoints(pose_landmarks):
+    if not pose_landmarks:
+        return None
+
+    lm = pose_landmarks.landmark
+
+    keypoints = {
+        "head": {
+            "x": lm[mp_pose.PoseLandmark.NOSE].x,
+            "y": lm[mp_pose.PoseLandmark.NOSE].y
+        },
+        "left_shoulder": {
+            "x": lm[mp_pose.PoseLandmark.LEFT_SHOULDER].x,
+            "y": lm[mp_pose.PoseLandmark.LEFT_SHOULDER].y
+        },
+        "right_shoulder": {
+            "x": lm[mp_pose.PoseLandmark.RIGHT_SHOULDER].x,
+            "y": lm[mp_pose.PoseLandmark.RIGHT_SHOULDER].y
+        },
+        "left_elbow": {
+            "x": lm[mp_pose.PoseLandmark.LEFT_ELBOW].x,
+            "y": lm[mp_pose.PoseLandmark.LEFT_ELBOW].y
+        },
+        "right_elbow": {
+            "x": lm[mp_pose.PoseLandmark.RIGHT_ELBOW].x,
+            "y": lm[mp_pose.PoseLandmark.RIGHT_ELBOW].y
+        }
+    }
+
+    return keypoints
+
 
 def count_fingers(hand_landmarks, handedness):
     fingers = []
@@ -44,35 +85,41 @@ def detect_gesture(finger_count):
 def main(frame):
     frame = cv2.flip(frame, 1)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = hands.process(rgb)
+
+    hand_results = hands.process(rgb)
+    pose_results = pose.process(rgb)
 
     output = {
-        "left": None,
-        "right": None
+        "hands": {
+            "left": None,
+            "right": None
+        },
+        "body": None
     }
 
-    if not results.multi_hand_landmarks:
-        return output
+    # ----- HANDS -----
+    if hand_results.multi_hand_landmarks:
+        for lm, hd in zip(hand_results.multi_hand_landmarks,
+                          hand_results.multi_handedness):
 
-    for lm, hd in zip(results.multi_hand_landmarks, results.multi_handedness):
-        label = hd.classification[0].label
+            label = hd.classification[0].label
+            finger_count = count_fingers(lm, label)
+            gesture = detect_gesture(finger_count)
 
-        finger_count = count_fingers(lm, label)
-        gesture = detect_gesture(finger_count)
-        wrist_x = lm.landmark[0].x
-        wrist_y = lm.landmark[0].y
+            wrist_x = 1 - lm.landmark[0].x
+            wrist_y = 1 - lm.landmark[0].y
 
-        # mirror the wrist coordinates
-        wrist_x = 1 - wrist_x
-        wrist_y = 1 - wrist_y
-
-        output[label.lower()] = {
-            "fingers": finger_count,
-            "gesture": gesture,
-            "wrist": {
-                "x": wrist_x,
-                "y": wrist_y
+            output["hands"][label.lower()] = {
+                "fingers": finger_count,
+                "gesture": gesture,
+                "wrist": {
+                    "x": wrist_x,
+                    "y": wrist_y
+                }
             }
-        }
+
+    # ----- BODY POSE -----
+    output["body"] = get_body_keypoints(pose_results.pose_landmarks)
 
     return output
+
