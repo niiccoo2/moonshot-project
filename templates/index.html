@@ -24,6 +24,14 @@
         <p>Wrist X: <span id="right-wrist-x">-</span></p>
         <p>Wrist Y: <span id="right-wrist-y">-</span></p>
     </div>
+    <div id="body">
+        <h3>Body:</h3>
+        <p>Left Elbow: <span id="left_elbow">-</span></p>
+        <p>Right Elbow: <span id="right_elbow">-</span></p>
+        <p>Left Shoulder: <span id="left_shoulder">-</span></p>
+        <p>Right Shoulder: <span id="right_shoulder">-</span></p>
+    </div>
+
 </div>
 
 <script>
@@ -58,9 +66,45 @@ socket.on("result", data => {
             document.getElementById(`${hand}-wrist-y`).innerText = "-";
         }
     }
+    function setValue(id, value) {
+    document.getElementById(id).innerText =
+        value !== null ? value.toFixed(2) : "-";
+    }
 
+    function updateBody(info) {
+        if (!info) {
+            setValue("left_elbow", null);
+            setValue("right_elbow", null);
+            setValue("left_shoulder", null);
+            setValue("right_shoulder", null);
+            return;
+        }
+
+        setValue(
+            "left_elbow",
+            info.left_elbow ? info.left_elbow.y : null
+        );
+
+        setValue(
+            "right_elbow",
+            info.right_elbow ? info.right_elbow.y : null
+        );
+
+        setValue(
+            "left_shoulder",
+            info.left_shoulder ? info.left_shoulder.y : null
+        );
+
+        setValue(
+            "right_shoulder",
+            info.right_shoulder ? info.right_shoulder.y : null
+        );
+    }
+
+    // update the info
     updateHand("left", data.hands.left);
     updateHand("right", data.hands.right);
+    updateBody("body", data.body);
 });
 
 </script>

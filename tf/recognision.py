@@ -122,4 +122,3 @@ def main(frame):
     output["body"] = get_body_keypoints(pose_results.pose_landmarks)
 
     return output
-
