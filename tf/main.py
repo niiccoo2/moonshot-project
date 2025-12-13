@@ -40,6 +40,11 @@ def count_fingers_right(hand_landmarks, handedness):
 
     return sum(fingers), fingers
 
+def get_wrist_position_left(hand_landmarks):
+    return hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y
+
+def get_wrist_position_right(hand_landmarks):
+    return hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y
 
 def count_fingers_left(hand_landmarks, handedness):
     fingers = []
@@ -68,11 +73,16 @@ while cap.isOpened():
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb)
 
-
     if results.multi_hand_landmarks and results.multi_handedness:
         hand_counts = {"Right": [], "Left": []}
+        wrist_positions = {"Right": None, "Left": None}
+
         for lm, hd in zip(results.multi_hand_landmarks, results.multi_handedness):
             label = hd.classification[0].label
+
+            # save wrist position
+            wrist_positions[label] = (lm.landmark[0].x, lm.landmark[0].y)
+
             if label == "Right":
                 count, fingers = count_fingers_right(lm, label)
             else:
@@ -84,7 +94,10 @@ while cap.isOpened():
             )
 
         print("Fingers Right:", hand_counts["Right"])
+        print("Right Hand Wrist:", wrist_positions["Right"])
         print("Fingers Left:", hand_counts["Left"])
+        print("Left Hand Wrist:", wrist_positions["Left"])
+
     else:
         print("Fingers Right: None")
         print("Fingers Left: None")
