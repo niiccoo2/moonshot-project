@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
+	import Game from '$lib/Game.svelte';
 
 	let video: HTMLVideoElement;
 	let canvas: HTMLCanvasElement;
@@ -8,6 +9,9 @@
 	let debug: boolean = false;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 1000 / 15; // 15 fps
+
+	let leftHandPos = { x: 0.5, y: 0.5 };
+	let rightHandPos = { x: 0.5, y: 0.5 };
 
 	onMount(async () => {
 		ctx = canvas.getContext('2d');
@@ -141,6 +145,15 @@
 					const handLandmarkerResult = handLandmarker.detectForVideo(video, now);
 					const poseLandmarkerResult = poseLandmarker.detectForVideo(video, now);
 					processResults(handLandmarkerResult, poseLandmarkerResult);
+
+					handLandmarkerResult.landmarks.forEach((hand, index) => {
+						const handedness = handLandmarkerResult.handedness[index][0].categoryName; // "Left" or "Right"
+						if (handedness === 'Left') {
+							leftHandPos = { x: hand[0].x, y: hand[0].y };
+						} else if (handedness === 'Right') {
+							rightHandPos = { x: hand[0].x, y: hand[0].y };
+						}
+					});
 					if (handLandmarkerResult.landmarks && handLandmarkerResult.handedness) {
 						handLandmarkerResult.landmarks.forEach((hand: any, index: number) => {
 							const handedness =
@@ -159,5 +172,7 @@
 	});
 </script>
 
-<canvas bind:this={canvas} width="640" height="480"></canvas>
-<video bind:this={video} autoplay playsinline hidden></video>
+<canvas bind:this={canvas} width="640" height="480" hidden></canvas>
+<video bind:this={video} autoplay playsinline style="transform: scaleX(-1);"></video>
+
+<Game {leftHandPos} {rightHandPos} />
