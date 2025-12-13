@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+	import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 	let video: HTMLVideoElement;
 	let canvas: HTMLCanvasElement;
@@ -20,8 +20,16 @@
 			numHands: 2
 		});
 
+		const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+			baseOptions: {
+				modelAssetPath: '/models/pose_landmarker_lite.task'
+			},
+			runningMode: 'VIDEO'
+		});
+
 		// Set running mode to VIDEO
 		handLandmarker.setOptions({ runningMode: 'VIDEO' });
+		poseLandmarker.setOptions({ runningMode: 'VIDEO' });
 
 		// Start webcam
 		const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -31,7 +39,7 @@
 
 		let lastVideoTime = -1;
 
-		function processResults(results: any) {
+		function processResults(handLandmarkerResult: any, poseLandmarkerResult: any) {
 			if (!ctx) return;
 
 			// Clear canvas
@@ -44,13 +52,13 @@
 			ctx.restore();
 
 			// Check if landmarks exist
-			if (results.landmarks) {
-				results.landmarks.forEach((hand: any, index: number) => {
+			if (handLandmarkerResult.landmarks) {
+				handLandmarkerResult.landmarks.forEach((hand: any, index: number) => {
 					if (debug) {
 						console.log(`Hand ${index + 1}:`);
 						console.log('Landmarks:', hand); // raw x, y, z
-						if (results.handedness) {
-							console.log('Handedness:', results.handedness[index]); // e.g., Right or Left
+						if (handLandmarkerResult.handedness) {
+							console.log('Handedness:', handLandmarkerResult.handedness[index]); // e.g., Right or Left
 						}
 					}
 
@@ -70,12 +78,34 @@
 					console.log('No hands detected');
 				}
 			}
+			if (poseLandmarkerResult.landmarks) {
+				poseLandmarkerResult.landmarks.forEach((pose: any, index: number) => {
+					if (debug) {
+						console.log(`Pose ${index + 1}:`);
+						console.log('Landmarks:', pose);
+					}
+					ctx.fillStyle = 'blue';
+					for (const point of pose) {
+						const px = (1 - point.x) * canvas.width; // flip horizontally
+						const py = point.y * canvas.height;
+						ctx.beginPath();
+						ctx.arc(px, py, 5, 0, 2 * Math.PI);
+						ctx.fill();
+					}
+				});
+			} else {
+				if (debug) {
+					console.log('No pose detected');
+				}
+			}
 		}
 
 		function renderLoop() {
 			if (video.currentTime !== lastVideoTime) {
-				const results = handLandmarker.detectForVideo(video, performance.now());
-				processResults(results);
+				const now = performance.now();
+				const handLandmarkerResult = handLandmarker.detectForVideo(video, now);
+				const poseLandmarkerResult = poseLandmarker.detectForVideo(video, now);
+				processResults(handLandmarkerResult, poseLandmarkerResult);
 				lastVideoTime = video.currentTime;
 			}
 			requestAnimationFrame(renderLoop);
