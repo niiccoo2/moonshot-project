@@ -10,7 +10,8 @@ import os as os
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
-PORT = 7000
+
+PORT = int(os.environ.get("PORT", 7000))
 
 def get_info(result, name):
     # hands
