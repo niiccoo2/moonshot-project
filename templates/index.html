@@ -7,7 +7,24 @@
 <body>
 
 <video id="video" autoplay playsinline></video>
-<canvas id="canvas" width="320" height="240" style="display:none"></canvas>
+<canvas id="canvas" width="300" height="220" style="display:none"></canvas>
+
+<div id="output">
+    <div id="left-hand">
+        <h3>Left Hand</h3>
+        <p>Fingers: <span id="left-fingers">-</span></p>
+        <p>Gesture: <span id="left-gesture">-</span></p>
+        <p>Wrist X: <span id="left-wrist-x">-</span></p>
+        <p>Wrist Y: <span id="left-wrist-y">-</span></p>
+    </div>
+    <div id="right-hand">
+        <h3>Right Hand</h3>
+        <p>Fingers: <span id="right-fingers">-</span></p>
+        <p>Gesture: <span id="right-gesture">-</span></p>
+        <p>Wrist X: <span id="right-wrist-x">-</span></p>
+        <p>Wrist Y: <span id="right-wrist-y">-</span></p>
+    </div>
+</div>
 
 <script>
 const video = document.getElementById("video");
@@ -26,9 +43,24 @@ setInterval(() => {
 }, 66); // ~15 fps
 
 socket.on("result", data => {
-
     console.log(data);
 
+    function updateHand(hand, info) {
+        if (info) {
+            document.getElementById(`${hand}-fingers`).innerText = info.fingers;
+            document.getElementById(`${hand}-gesture`).innerText = info.gesture;
+            document.getElementById(`${hand}-wrist-x`).innerText = info.wrist.x.toFixed(2);
+            document.getElementById(`${hand}-wrist-y`).innerText = info.wrist.y.toFixed(2);
+        } else {
+            document.getElementById(`${hand}-fingers`).innerText = "-";
+            document.getElementById(`${hand}-gesture`).innerText = "-";
+            document.getElementById(`${hand}-wrist-x`).innerText = "-";
+            document.getElementById(`${hand}-wrist-y`).innerText = "-";
+        }
+    }
+
+    updateHand("left", data.left);
+    updateHand("right", data.right);
 });
 </script>
 
