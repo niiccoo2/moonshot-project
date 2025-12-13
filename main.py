@@ -9,15 +9,30 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 def get_info(result, name):
     # hands
-    hand_left_fingers = result["hands"]["left"]["fingers"]
-    hand_left_gesture = result["hands"]["left"]["gesture"]
-    hand_left_wrist_x = result["hands"]["left"]["wrist"]["x"]
-    hand_left_wrist_y = result["hands"]["left"]["wrist"]["y"]
+    left_hand = result["hands"]["left"]
+    right_hand = result["hands"]["right"]
 
-    hand_right_fingers = result["hands"]["right"]["fingers"]
-    hand_right_gesture = result["hands"]["right"]["gesture"]
-    hand_right_wrist_x = result["hands"]["right"]["wrist"]["x"]
-    hand_right_wrist_y = result["hands"]["right"]["wrist"]["y"]
+    if left_hand is not None:
+        hand_left_fingers = left_hand["fingers"]
+        hand_left_gesture = left_hand["gesture"]
+        hand_left_wrist_x = left_hand["wrist"]["x"]
+        hand_left_wrist_y = left_hand["wrist"]["y"]
+    else:
+        hand_left_fingers = None
+        hand_left_gesture = None
+        hand_left_wrist_x = None
+        hand_left_wrist_y = None
+
+    if right_hand is not None:
+        hand_right_fingers = right_hand["fingers"]
+        hand_right_gesture = right_hand["gesture"]
+        hand_right_wrist_x = right_hand["wrist"]["x"]
+        hand_right_wrist_y = right_hand["wrist"]["y"]
+    else:
+        hand_right_fingers = None
+        hand_right_gesture = None
+        hand_right_wrist_x = None
+        hand_right_wrist_y = None
 
     # body
     body_head_x = result["body"]["head"]["x"]
