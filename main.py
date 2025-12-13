@@ -1,5 +1,6 @@
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
+import socket
 import numpy as np
 import cv2
 from tf.recognision import main
@@ -9,6 +10,8 @@ import os as os
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+
+PORT = int(os.environ.get("PORT", 7000))
 
 def get_info(result, name):
     # hands
@@ -78,7 +81,9 @@ def index():
 @app.route("/connect_cam", methods=["GET", "POST"])
 def connect_cam():
     session_id = generate_session_id()
-    link = f"http://localhost:7000/connect_cam/{session_id}"
+    ip = (lambda s: (s.connect(("8.8.8.8", 80)), s.getsockname()[0], s.close())[1])(
+        socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+    link = f"{ip}:7000/connect_cam/{session_id}"
 
     print(f"Here is the link to the session cam connection: {link}")
 
@@ -100,9 +105,11 @@ def session_cam(session_id):
         session_id=session_id
     )
 
-
 @socketio.on("frame")
 def handle_frame(blob):
+    # Send frame to other clients (viewer)
+    emit("frame", blob, broadcast=True, include_self=False)
+
     np_arr = np.frombuffer(blob, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
@@ -114,5 +121,29 @@ def handle_frame(blob):
     except Exception:
         pass
 
+@socketio.on("offer")
+def handle_offer(data):
+    emit("offer", data, broadcast=True, include_self=False)
+
+@socketio.on("answer")
+def handle_answer(data):
+    emit("answer", data, broadcast=True, include_self=False)
+
+@socketio.on("ice-candidate")
+def handle_candidate(data):
+    emit("ice-candidate", data, broadcast=True, include_self=False)
+
+@socketio.on("viewer_request")
+def handle_viewer():
+    # kann zuletzt verarbeiteten Frame senden
+    if hasattr(app, "last_frame"):
+        _, buffer = cv2.imencode(".jpg", app.last_frame)
+        emit("frame", buffer.tobytes())
+
+
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5002)
+    ip = (lambda s: (s.connect(("8.8.8.8", 80)), s.getsockname()[0], s.close())[1])(
+        socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+
+    print(f"Server running under:\nPC: http://127.0.0.1:{PORT}\nWLAN: http://{ip}:{PORT}/")
+    socketio.run(app, host="0.0.0.0", port=7000)
