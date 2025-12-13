@@ -81,9 +81,7 @@ def index():
 @app.route("/connect_cam", methods=["GET", "POST"])
 def connect_cam():
     session_id = generate_session_id()
-    ip = (lambda s: (s.connect(("8.8.8.8", 80)), s.getsockname()[0], s.close())[1])(
-        socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
-    link = f"{ip}:7000/connect_cam/{session_id}"
+    link = f"https://moonshot.niiccoo2.xyz/connect_cam/{session_id}"
 
     print(f"Here is the link to the session cam connection: {link}")
 
