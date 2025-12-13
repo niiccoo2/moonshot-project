@@ -13,6 +13,9 @@
 
 	export let leftHandPos = { x: 0.5, y: 0.5 };
 	export let rightHandPos = { x: 0.5, y: 0.5 };
+	export let WIDTH: number = 640;
+	export let HEIGHT: number = 480;
+
 	let leftGesture = 'unknown';
 	let rightGesture = 'unknown';
 	let bodyKeypoints = null;
@@ -29,9 +32,10 @@
 
 			const config = {
 				type: Phaser.AUTO,
-				width: 800,
-				height: 600,
+				width: WIDTH,
+				height: HEIGHT,
 				parent: gameContainer,
+				transparent: true,
 				physics: {
 					default: 'arcade',
 					arcade: {
@@ -121,7 +125,11 @@
 				obj.objectType = type.key;
 			}
 
-			function collectObject(this: Phaser.Scene, object: any) {
+			function collectObject(
+				this: Phaser.Scene,
+				player: Phaser.Physics.Arcade.Sprite,
+				object: any
+			) {
 				score += object.points;
 				const scoreDisplay = document.getElementById('score-display');
 				if (scoreDisplay) {
@@ -150,7 +158,7 @@
 			}
 
 			function create(this: any) {
-				player = this.physics.add.sprite(400, 550, 'basket');
+				player = this.physics.add.sprite(WIDTH / 2, HEIGHT - 30, 'basket');
 				if (player == null) return;
 				player.setCollideWorldBounds(true);
 
@@ -180,7 +188,7 @@
 
 				if (handsDetected && handX > 0.05 && handX < 0.95) {
 					// Use hand tracking - map normalized coordinates to screen
-					player.x = handX * 800;
+					player.x = Phaser.Math.Clamp(handX * WIDTH, player.width / 2, WIDTH - player.width / 2);
 				} else {
 					// Keyboard fallback
 					if (cursors.left.isDown) {
@@ -188,6 +196,7 @@
 					} else if (cursors.right.isDown) {
 						player.x += 8;
 					}
+					player.x = Phaser.Math.Clamp(player.x, player.width / 2, WIDTH - player.width / 2);
 				}
 
 				// Spawn falling objects

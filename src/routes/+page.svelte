@@ -3,6 +3,9 @@
 	import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
 	import Game from '$lib/Game.svelte';
 
+	const WIDTH: number = 640;
+	const HEIGHT: number = 480;
+
 	let video: HTMLVideoElement;
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null = null;
@@ -149,9 +152,9 @@
 					handLandmarkerResult.landmarks.forEach((hand, index) => {
 						const handedness = handLandmarkerResult.handedness[index][0].categoryName; // "Left" or "Right"
 						if (handedness === 'Left') {
-							leftHandPos = { x: hand[0].x, y: hand[0].y };
+							leftHandPos = { x: -hand[0].x, y: hand[0].y }; // did - because we flip it
 						} else if (handedness === 'Right') {
-							rightHandPos = { x: hand[0].x, y: hand[0].y };
+							rightHandPos = { x: -hand[0].x, y: hand[0].y }; // idk if this is the best place to do the flip tho
 						}
 					});
 					if (handLandmarkerResult.landmarks && handLandmarkerResult.handedness) {
@@ -172,7 +175,45 @@
 	});
 </script>
 
-<canvas bind:this={canvas} width="640" height="480" hidden></canvas>
-<video bind:this={video} autoplay playsinline style="transform: scaleX(-1);"></video>
+<div class="overlay-container">
+	<video bind:this={video} autoplay playsinline style="transform: scaleX(-1);" class="video-bg"
+	></video>
+	<canvas bind:this={canvas} width={WIDTH} height={HEIGHT} class="canvas-overlay" hidden></canvas>
+	<div class="game-overlay">
+		<Game {leftHandPos} {rightHandPos} {WIDTH} {HEIGHT} />
+	</div>
+</div>
 
-<Game {leftHandPos} {rightHandPos} />
+<style>
+	.overlay-container {
+		position: relative;
+		width: 640px;
+		height: 480px;
+	}
+	.video-bg {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 1;
+	}
+	.canvas-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 2;
+		pointer-events: none;
+	}
+	.game-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 3;
+		pointer-events: none;
+	}
+</style>
