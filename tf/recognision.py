@@ -11,6 +11,7 @@ hands = mp_hands.Hands(
 )
 mp_drawing = mp.solutions.drawing_utils
 
+# def get_body_keypoints():
 
 def count_fingers(hand_landmarks, handedness):
     fingers = []
@@ -60,6 +61,10 @@ def main(frame):
         gesture = detect_gesture(finger_count)
         wrist_x = lm.landmark[0].x
         wrist_y = lm.landmark[0].y
+
+        # mirror the wrist coordinates
+        wrist_x = 1 - wrist_x
+        wrist_y = 1 - wrist_y
 
         output[label.lower()] = {
             "fingers": finger_count,
