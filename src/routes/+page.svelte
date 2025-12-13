@@ -61,7 +61,9 @@
 							console.log('Handedness:', handLandmarkerResult.handedness[index]); // e.g., Right or Left
 						}
 					}
-
+					if (ctx == null) {
+						return;
+					}
 					// Draw landmarks on canvas
 					ctx.fillStyle = 'red';
 					for (const point of hand) {
@@ -83,6 +85,9 @@
 					if (debug) {
 						console.log(`Pose ${index + 1}:`);
 						console.log('Landmarks:', pose);
+					}
+					if (ctx == null) {
+						return;
 					}
 					ctx.fillStyle = 'blue';
 					for (const point of pose) {
