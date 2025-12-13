@@ -57,8 +57,11 @@
 					// Draw landmarks on canvas
 					ctx.fillStyle = 'red';
 					for (const point of hand) {
+						// ctx.scale(-1, 1);
+						const px = (1 - point.x) * canvas.width; // flip horizontally
+						const py = point.y * canvas.height;
 						ctx.beginPath();
-						ctx.arc(point.x * canvas.width, point.y * canvas.height, 5, 0, 2 * Math.PI);
+						ctx.arc(px, py, 5, 0, 2 * Math.PI);
 						ctx.fill();
 					}
 				});
