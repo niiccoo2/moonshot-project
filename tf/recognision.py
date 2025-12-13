@@ -21,7 +21,7 @@ def count_fingers(hand_landmarks, handedness):
     else:
         fingers.append(hand_landmarks.landmark[4].x > hand_landmarks.landmark[3].x)
 
-    # Other fingers
+    # other fingers
     for tip in [8, 12, 16, 20]:
         fingers.append(
             hand_landmarks.landmark[tip].y <
