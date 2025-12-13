@@ -1,10 +1,38 @@
+<!-- temp_cam_connection.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Handy Camera Stream</title>
 </head>
 <body>
-accept the cam func and check if you see the cam output on your gaming device
+<h2>Handy Camera Streaming</h2>
+<video id="localVideo" autoplay muted playsinline></video>
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io();
+const video = document.getElementById("localVideo");
+
+navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+.then(stream => {
+    video.srcObject = stream;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    setInterval(() => {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => {
+                if(blob) {
+                    socket.emit("frame", blob);
+                }
+            }, "image/jpeg", 0.5);
+        }
+    }, 100); // Send frame every 100ms (~10 FPS)
+});
+</script>
 </body>
-</html>>
+</html>

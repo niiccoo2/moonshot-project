@@ -7,5 +7,19 @@
 <body>
 here u can scan the qr code
 <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
+<h2>Live Viewer</h2>
+<img id="stream" />
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io();
+const img = document.getElementById("stream");
+
+socket.on("frame", blob => {
+    const url = URL.createObjectURL(new Blob([blob], {type: "image/jpeg"}));
+    img.src = url;
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+});
+</script>
 </body>
-</html>>
+</html>
