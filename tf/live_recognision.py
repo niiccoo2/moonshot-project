@@ -10,6 +10,15 @@ hands = mp_hands.Hands(
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5
 )
+
+# --- Mediapipe Pose ---
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(
+    static_image_mode=False,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
 mp_drawing = mp.solutions.drawing_utils
 
 # ----- Camera Setup -----
@@ -100,6 +109,8 @@ def main():
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
 
+
+        # hand reco stuff
         if results.multi_hand_landmarks and results.multi_handedness:
             hand_counts = {"Right": [], "Left": []}
             wrist_positions = {"Right": None, "Left": None}
