@@ -6,6 +6,7 @@ import time as t
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     max_num_hands=2,
+    model_complexity=0,
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5
 )
@@ -137,9 +138,9 @@ def main():
                 gesture_left = detect_gesture(fingers_left)
                 gesture_right = detect_gesture(fingers_right)
 
-                print(fingers_left, fingers_right, wrist_right_positions_y, wrist_right_positions_x, wrist_left_positions_y, wrist_left_positions_x, gesture_left, gesture_right
-)
-
+                print(f"Finger left: {fingers_left}, Finger right: {fingers_right}")
+                print(f"Wrist left: {wrist_left_positions_x}, {wrist_left_positions_y}, Wrist right: {wrist_right_positions_x}, {wrist_right_positions_y}")
+                print(f"Gesture left: {gesture_left}, Gesture right: {gesture_right}")
 
         else:
             print("Fingers Right: None")
@@ -149,16 +150,8 @@ def main():
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
-
     cap.release()
     cv2.destroyAllWindows()
 
-    return fingers_left, fingers_right, wrist_right_positions_y, wrist_right_positions_x, wrist_left_positions_y, wrist_left_positions_x, gesture_left, gesture_right
-
-def stop():
-    cap.release()
-    cv2.destroyAllWindows()
-
-main()
-
-
+if __name__ == "__main__":
+    print(main())
