@@ -6,6 +6,8 @@
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null = null;
 	let debug: boolean = false;
+	let lastProcessTime = 0;
+	const PROCESS_INTERVAL = 1000 / 15; // 15 fps
 
 	onMount(async () => {
 		ctx = canvas.getContext('2d');
@@ -37,7 +39,24 @@
 
 		await video.play();
 
-		let lastVideoTime = -1;
+		function countFingers(handLandmarks: any, handedness: string) {
+			let fingers = [];
+
+			// Thumb
+			if (handedness == 'Right') {
+				fingers.push(handLandmarks.landmark[4].x < handLandmarks.landmark[3].x);
+			} else {
+				fingers.push(handLandmarks.landmark[4].x > handLandmarks.landmark[3].x);
+			}
+
+			for (const tip of [8, 12, 16, 20]) {
+				fingers.push(handLandmarks.landmark[tip].y < handLandmarks.landmark[Number(tip) - 2].y);
+			}
+
+			const sum = fingers.reduce((acc, b) => acc + (b ? 1 : 0), 0);
+
+			return sum;
+		}
 
 		function processResults(handLandmarkerResult: any, poseLandmarkerResult: any) {
 			if (!ctx) return;
@@ -106,14 +125,24 @@
 		}
 
 		function renderLoop() {
-			if (video.currentTime !== lastVideoTime) {
+			const process = () => {
 				const now = performance.now();
-				const handLandmarkerResult = handLandmarker.detectForVideo(video, now);
-				const poseLandmarkerResult = poseLandmarker.detectForVideo(video, now);
-				processResults(handLandmarkerResult, poseLandmarkerResult);
-				lastVideoTime = video.currentTime;
-			}
-			requestAnimationFrame(renderLoop);
+				if (now - lastProcessTime > PROCESS_INTERVAL) {
+					const handLandmarkerResult = handLandmarker.detectForVideo(video, now);
+					const poseLandmarkerResult = poseLandmarker.detectForVideo(video, now);
+					processResults(handLandmarkerResult, poseLandmarkerResult);
+					if (handLandmarkerResult.landmarks && handLandmarkerResult.handedness) {
+						handLandmarkerResult.landmarks.forEach((hand: any, index: number) => {
+							const handedness =
+								handLandmarkerResult.handedness[index]?.[0]?.categoryName || 'Right';
+							console.log(countFingers({ landmark: hand }, handedness));
+						});
+					}
+					lastProcessTime = now;
+				}
+				video.requestVideoFrameCallback(process);
+			};
+			video.requestVideoFrameCallback(process);
 		}
 
 		renderLoop();
