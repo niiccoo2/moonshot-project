@@ -1,6 +1,6 @@
 import cv2
 import mediapipe as mp
-import time
+import time as t
 
 # ----- MediaPipe Hands -----
 mp_hands = mp.solutions.hands
@@ -106,5 +106,89 @@ while cap.isOpened():
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-cap.release()
-cv2.destroyAllWindows()
+def detect_gesture(finger_count):
+    if finger_count == 0:
+        return "closed"
+
+    elif finger_count == 5:
+        return "open"
+
+    else:
+        return "unknown"
+
+
+def main():
+    """
+    Output:
+        - fingers_left: number of open fingers in left hand
+        - fingers_right: number of open fingers in right hand
+        - wrist_left_positions_y:
+        - wrist_left_positions_x:
+        - wrist_right_positions_y:
+        - wrist_right_positions_x:
+        - gesture_left: gesture of left hand
+        - gesture_right: gesture of right hand
+    """
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        frame = cv2.flip(frame, 1)
+        h, w, _ = frame.shape
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(rgb)
+
+        if results.multi_hand_landmarks and results.multi_handedness:
+            hand_counts = {"Right": [], "Left": []}
+            wrist_positions = {"Right": None, "Left": None}
+
+            for lm, hd in zip(results.multi_hand_landmarks, results.multi_handedness):
+                label = hd.classification[0].label
+
+                # save wrist position
+                wrist_positions[label] = (lm.landmark[0].x, lm.landmark[0].y)
+
+                if label == "Right":
+                    count, fingers = count_fingers_right(lm, label)
+                else:
+                    count, fingers = count_fingers_left(lm, label)
+                hand_counts[label].append(count)
+
+                mp_drawing.draw_landmarks(
+                    frame, lm, mp_hands.HAND_CONNECTIONS
+                )
+
+            print("Fingers Right:", hand_counts["Right"])
+            print("Right Hand Wrist:", wrist_positions["Right"])
+            print("Fingers Left:", hand_counts["Left"])
+            print("Left Hand Wrist:", wrist_positions["Left"])
+
+        else:
+            print("Fingers Right: None")
+            print("Fingers Left: None")
+
+        cv2.imshow("best moonshot projekt...", frame)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+        # output data
+        fingers_left = hand_counts["Left"]
+        fingers_right = hand_counts["Right"]
+        wrist_right_positions_y = wrist_positions["Right"][0]
+        wrist_right_positions_x = wrist_positions["Right"][1]
+        wrist_left_positions_y = wrist_positions["Left"][0]
+        wrist_left_positions_x = wrist_positions["Left"][1]
+        gesture_left = detect_gesture(fingers_left)
+        gesture_right = detect_gesture(fingers_right)
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return fingers_left, fingers_right, wrist_right_positions_y, wrist_right_positions_x, wrist_left_positions_y, wrist_left_positions_x, gesture_left, gesture_right
+
+def stop():
+    cap.release()
+    cv2.destroyAllWindows()
+
+main()
