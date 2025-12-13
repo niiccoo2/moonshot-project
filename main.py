@@ -3,6 +3,9 @@ from flask_socketio import SocketIO, emit
 import numpy as np
 import cv2
 from tf.recognision import main
+import uuid
+import qrcode as qr
+import os as os
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -64,10 +67,39 @@ def get_info(result, name):
 
     return locals().get(name)
 
+def generate_session_id():
+    session_id = uuid.uuid4().hex
+    return session_id
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/connect_cam", methods=["GET", "POST"])
+def connect_cam():
+    session_id = generate_session_id()
+    link = f"http://localhost:7000/connect_cam/{session_id}"
+
+    print(f"Here is the link to the session cam connection: {link}")
+
+    # make sure that the path to the qr code exists
+    os.makedirs(os.path.join("static", "qr_code"), exist_ok=True)
+    img = qr.make(link)
+    img.save(os.path.join("static", "qr_code", f"qr-code-{session_id}.png"))
+
+    return render_template(
+        "connect_cam.html",
+        session_id=session_id
+    )
+
+
+@app.route("/connect_cam/<session_id>", methods=["GET", "POST"])
+def session_cam(session_id):
+    return render_template(
+        "temp_cam_connection.html",
+        session_id=session_id
+    )
+
 
 @socketio.on("frame")
 def handle_frame(blob):
@@ -82,6 +114,5 @@ def handle_frame(blob):
     except Exception:
         pass
 
-
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    socketio.run(app, host="0.0.0.0", port=7000)
