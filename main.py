@@ -19,8 +19,8 @@ def handle_frame(blob):
     result = main(frame)
     emit("result", result)
 
-    # debug for now
-    print(result)
+    # # debug for now
+    # print(result)
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000)

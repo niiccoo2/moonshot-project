@@ -59,9 +59,10 @@ socket.on("result", data => {
         }
     }
 
-    updateHand("left", data.left);
-    updateHand("right", data.right);
+    updateHand("left", data.hands.left);
+    updateHand("right", data.hands.right);
 });
+
 </script>
 
 </body>
