@@ -35,20 +35,32 @@ def get_info(result, name):
         hand_right_wrist_y = None
 
     # body
-    body_head_x = result["body"]["head"]["x"]
-    body_head_y = result["body"]["head"]["y"]
+    if result["body"] is not None:
+        body_head_x = result["body"]["head"]["x"]
+        body_head_y = result["body"]["head"]["y"]
 
-    body_shoulder_left_x = result["body"]["left_shoulder"]["x"]
-    body_shoulder_left_y = result["body"]["left_shoulder"]["y"]
+        body_shoulder_left_x = result["body"]["left_shoulder"]["x"]
+        body_shoulder_left_y = result["body"]["left_shoulder"]["y"]
 
-    body_shoulder_right_x = result["body"]["right_shoulder"]["x"]
-    body_shoulder_right_y = result["body"]["right_shoulder"]["y"]
+        body_shoulder_right_x = result["body"]["right_shoulder"]["x"]
+        body_shoulder_right_y = result["body"]["right_shoulder"]["y"]
 
-    body_elbow_left_x = result["body"]["left_elbow"]["x"]
-    body_elbow_left_y = result["body"]["left_elbow"]["y"]
+        body_elbow_left_x = result["body"]["left_elbow"]["x"]
+        body_elbow_left_y = result["body"]["left_elbow"]["y"]
 
-    body_elbow_right_x = result["body"]["right_elbow"]["x"]
-    body_elbow_right_y = result["body"]["right_elbow"]["y"]
+        body_elbow_right_x = result["body"]["right_elbow"]["x"]
+        body_elbow_right_y = result["body"]["right_elbow"]["y"]
+    else:
+        body_head_x = None
+        body_head_y = None
+        body_shoulder_left_x = None
+        body_shoulder_left_y = None
+        body_shoulder_right_x = None
+        body_shoulder_right_y = None
+        body_elbow_left_x = None
+        body_elbow_left_y = None
+        body_elbow_right_x = None
+        body_elbow_right_y = None
 
     return locals().get(name)
 
@@ -65,8 +77,10 @@ def handle_frame(blob):
     result = main(frame)
     emit("result", result)
 
-    print(get_info(result, "hand_left_fingers"))
-
+    try:
+        print(get_info(result, "body_head_x"), get_info(result, "body_head_y"))
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
