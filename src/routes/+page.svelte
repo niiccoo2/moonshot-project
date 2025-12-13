@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
+	import Game from '$lib/Game.svelte';
+
+	const WIDTH: number = 640;
+	const HEIGHT: number = 480;
 
 	let video: HTMLVideoElement;
 	let canvas: HTMLCanvasElement;
@@ -8,6 +12,9 @@
 	let debug: boolean = false;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 1000 / 15; // 15 fps
+
+	let leftHandPos = { x: 0.5, y: 0.5 };
+	let rightHandPos = { x: 0.5, y: 0.5 };
 
 	onMount(async () => {
 		ctx = canvas.getContext('2d');
@@ -141,6 +148,15 @@
 					const handLandmarkerResult = handLandmarker.detectForVideo(video, now);
 					const poseLandmarkerResult = poseLandmarker.detectForVideo(video, now);
 					processResults(handLandmarkerResult, poseLandmarkerResult);
+
+					handLandmarkerResult.landmarks.forEach((hand, index) => {
+						const handedness = handLandmarkerResult.handedness[index][0].categoryName; // "Left" or "Right"
+						if (handedness === 'Left') {
+							leftHandPos = { x: -hand[0].x, y: hand[0].y }; // did - because we flip it
+						} else if (handedness === 'Right') {
+							rightHandPos = { x: -hand[0].x, y: hand[0].y }; // idk if this is the best place to do the flip tho
+						}
+					});
 					if (handLandmarkerResult.landmarks && handLandmarkerResult.handedness) {
 						handLandmarkerResult.landmarks.forEach((hand: any, index: number) => {
 							const handedness =
@@ -159,5 +175,45 @@
 	});
 </script>
 
-<canvas bind:this={canvas} width="640" height="480"></canvas>
-<video bind:this={video} autoplay playsinline hidden></video>
+<div class="overlay-container">
+	<video bind:this={video} autoplay playsinline style="transform: scaleX(-1);" class="video-bg"
+	></video>
+	<canvas bind:this={canvas} width={WIDTH} height={HEIGHT} class="canvas-overlay" hidden></canvas>
+	<div class="game-overlay">
+		<Game {leftHandPos} {rightHandPos} {WIDTH} {HEIGHT} />
+	</div>
+</div>
+
+<style>
+	.overlay-container {
+		position: relative;
+		width: 640px;
+		height: 480px;
+	}
+	.video-bg {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 1;
+	}
+	.canvas-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 2;
+		pointer-events: none;
+	}
+	.game-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 3;
+		pointer-events: none;
+	}
+</style>
