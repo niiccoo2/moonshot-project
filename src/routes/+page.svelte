@@ -44,9 +44,9 @@
 
 			// Thumb
 			if (handedness == 'Right') {
-				fingers.push(handLandmarks.landmark[4].x < handLandmarks.landmark[3].x);
-			} else {
 				fingers.push(handLandmarks.landmark[4].x > handLandmarks.landmark[3].x);
+			} else {
+				fingers.push(handLandmarks.landmark[4].x < handLandmarks.landmark[3].x);
 			}
 
 			for (const tip of [8, 12, 16, 20]) {
@@ -56,6 +56,16 @@
 			const sum = fingers.reduce((acc, b) => acc + (b ? 1 : 0), 0);
 
 			return sum;
+		}
+
+		function detectGesture(fingerCount: number) {
+			if (fingerCount === 0) {
+				return 'closed';
+			} else if (fingerCount === 5) {
+				return 'open';
+			} else {
+				return 'unknown';
+			}
 		}
 
 		function processResults(handLandmarkerResult: any, poseLandmarkerResult: any) {
