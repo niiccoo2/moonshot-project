@@ -1,0 +1,8 @@
+flask
+flask-socketio
+numpy
+opencv-python
+mediapipe
+qrcode[pil]
+eventlet
+
