@@ -2,7 +2,7 @@ import cv2
 import mediapipe as mp
 
 # ----- MediaPipe Hands -----
-mp_hands = mp.solutions.hands
+mp_hands = mp.solutions.hands #type:ignore
 hands = mp_hands.Hands(
     max_num_hands=2,
     model_complexity=0,
@@ -11,7 +11,7 @@ hands = mp_hands.Hands(
 )
 
 # ----- MediaPipe Pose -----
-mp_pose = mp.solutions.pose
+mp_pose = mp.solutions.pose #type:ignore
 pose = mp_pose.Pose(
     static_image_mode=False,
     model_complexity=0,
@@ -20,7 +20,7 @@ pose = mp_pose.Pose(
     min_tracking_confidence=0.5
 )
 
-mp_drawing = mp.solutions.drawing_utils
+mp_drawing = mp.solutions.drawing_utils #type:ignore
 
 def get_body_keypoints(pose_landmarks):
     if not pose_landmarks:

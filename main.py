@@ -90,7 +90,7 @@ def connect_cam():
     # make sure that the path to the qr code exists
     os.makedirs(os.path.join("static", "qr_code"), exist_ok=True)
     img = qr.make(link)
-    img.save(os.path.join("static", "qr_code", f"qr-code-{session_id}.png"))
+    img.save(os.path.join("static", "qr_code", f"qr-code-{session_id}.png")) #type:ignore
 
     return render_template(
         "connect_cam.html",
@@ -117,7 +117,7 @@ def handle_frame(blob):
     emit("result", result)
 
     try:
-        print(get_info(result, "body_head_x"), get_info(result, "body_head_y"))
+        print(f'Head info: x {get_info(result, "body_head_x")}, y {get_info(result, "body_head_y")}')
     except Exception:
         pass
 
@@ -137,7 +137,7 @@ def handle_candidate(data):
 def handle_viewer():
     # kann zuletzt verarbeiteten Frame senden
     if hasattr(app, "last_frame"):
-        _, buffer = cv2.imencode(".jpg", app.last_frame)
+        _, buffer = cv2.imencode(".jpg", app.last_frame) #type:ignore
         emit("frame", buffer.tobytes())
 
 
