@@ -1,5 +1,5 @@
-from flask import Flask, render_template
-from flask_socketio import SocketIO, emit
+from flask import Flask, render_template, session, request
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import socket
 import numpy as np
 import cv2
@@ -103,27 +103,64 @@ def session_cam(session_id):
         session_id=session_id
     )
 
+@socketio.on("join_session")
+def handle_join_session(session_id):
+    join_room(session_id)
+    print(f"Client joined session: {session_id}")
+
 @socketio.on("frame")
-def handle_frame(blob):
+def handle_frame(data):
+    if isinstance(data, dict):
+        blob = data.get("blob")
+        session_id = data.get("session_id")
+    else:
+        # Fallback for old clients or if data is just blob
+        blob = data
+        session_id = None # Broadcast to all if no session_id? Or just don't support it.
+
+    if not blob:
+        return
+
     # Decode frame
     np_arr = np.frombuffer(blob, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    app.last_frame = frame
+
+    # Store last frame per session if needed, or global for simple fallback
+    if session_id:
+        if not hasattr(app, "session_frames"):
+            app.session_frames = {}
+        app.session_frames[session_id] = frame
+    else:
+        app.last_frame = frame
 
     # Only send the first frame of a stream to the viewer
+    # We need to track time per session
     current_time = time.time()
-    last_time = getattr(app, "last_frame_time", 0)
 
-    if current_time - last_time > 2.0:
-        emit("frame", blob, broadcast=True, include_self=False)
+    if session_id:
+        if not hasattr(app, "session_times"):
+            app.session_times = {}
+        last_time = app.session_times.get(session_id, 0)
 
-    app.last_frame_time = current_time
+        if current_time - last_time > 2.0:
+             emit("frame", blob, room=session_id, include_self=False)
+
+        app.session_times[session_id] = current_time
+    else:
+        last_time = getattr(app, "last_frame_time", 0)
+        if current_time - last_time > 2.0:
+            emit("frame", blob, broadcast=True, include_self=False)
+        app.last_frame_time = current_time
 
     result = main(frame)
-    emit("result", result, broadcast=True)
+
+    if session_id:
+        emit("result", result, room=session_id)
+    else:
+        emit("result", result, broadcast=True)
 
     try:
-        print(f'Head info: x {get_info(result, "body_head_x")}, y {get_info(result, "body_head_y")}')
+        pass
     except Exception:
         pass
 
@@ -140,9 +177,14 @@ def handle_candidate(data):
     emit("ice-candidate", data, broadcast=True, include_self=False)
 
 @socketio.on("viewer_request")
-def handle_viewer():
-    # kann zuletzt verarbeiteten Frame senden
-    if hasattr(app, "last_frame"):
+def handle_viewer(session_id=None):
+    if session_id:
+        join_room(session_id)
+        print(f"Viewer joined session: {session_id}")
+        if hasattr(app, "session_frames") and session_id in app.session_frames:
+             _, buffer = cv2.imencode(".jpg", app.session_frames[session_id]) #type:ignore
+             emit("frame", buffer.tobytes(), room=session_id)
+    elif hasattr(app, "last_frame"):
         _, buffer = cv2.imencode(".jpg", app.last_frame) #type:ignore
         emit("frame", buffer.tobytes())
 

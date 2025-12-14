@@ -7,7 +7,7 @@
 <body>
 <div id="connection-status">
     <h3>Scan this QR code with your phone</h3>
-    <img src="{{ url_for('static', filename='qr-code-' + session_id + '.png') }}" alt="QR Code">
+    <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
 </div>
 
 <div id="stream-container" style="display:none; position: relative;">
@@ -17,7 +17,7 @@
     <br>
     <div style="position: relative; display: inline-block;">
         <img id="stream" style="display: block;" />
-        <canvas id="overlay" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+        <canvas id="overlay" style="position: absolute; top: 0; left: 0; pointer-events: none; width: 100%; height: 100%;"></canvas>
     </div>
 </div>
 
@@ -41,7 +41,7 @@ let isConnected = false;
 
 socket.on("connect", () => {
     console.log("Connected to server");
-    socket.emit("viewer_request");
+    socket.emit("viewer_request", "{{ session_id }}");
 });
 
 socket.on("frame", blob => {
