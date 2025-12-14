@@ -8,6 +8,7 @@ import uuid
 import qrcode as qr
 import os as os
 import time
+import eventlet
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -142,17 +143,18 @@ def handle_frame(data):
             app.session_times = {}
         last_time = app.session_times.get(session_id, 0)
 
-        if current_time - last_time > 2.0:
+        if last_time == 0:
              emit("frame", blob, room=session_id, include_self=False)
-
-        app.session_times[session_id] = current_time
+             # Update time only if we sent a frame
+             app.session_times[session_id] = current_time
     else:
         last_time = getattr(app, "last_frame_time", 0)
         if current_time - last_time > 2.0:
             emit("frame", blob, broadcast=True, include_self=False)
-        app.last_frame_time = current_time
+            app.last_frame_time = current_time
 
-    result = main(frame)
+    # Offload CPU-intensive task to a thread pool
+    result = eventlet.tpool.execute(main, frame)
 
     if session_id:
         emit("result", result, room=session_id)
