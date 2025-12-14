@@ -8,6 +8,7 @@ import uuid
 import qrcode as qr
 import os as os
 import time
+import eventlet
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -103,6 +104,15 @@ def session_cam(session_id):
         session_id=session_id
     )
 
+# Global lock for session processing to drop frames if busy
+processing_locks = {}
+
+def process_frame_task(blob):
+    np_arr = np.frombuffer(blob, np.uint8)
+    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    result = main(frame)
+    return frame, result
+
 @socketio.on("join_session")
 def handle_join_session(session_id):
     join_room(session_id)
@@ -142,27 +152,37 @@ def handle_frame(data):
             app.session_times = {}
         last_time = app.session_times.get(session_id, 0)
 
-        if current_time - last_time > 2.0:
+        if last_time == 0:
              emit("frame", blob, room=session_id, include_self=False)
-
-        app.session_times[session_id] = current_time
+             # Update time only if we sent a frame
+             app.session_times[session_id] = current_time
     else:
         last_time = getattr(app, "last_frame_time", 0)
         if current_time - last_time > 2.0:
             emit("frame", blob, broadcast=True, include_self=False)
-        app.last_frame_time = current_time
+            app.last_frame_time = current_time
 
-    result = main(frame)
-
+    # Check if we are already processing a frame for this session
     if session_id:
-        emit("result", result, room=session_id)
-    else:
-        emit("result", result, broadcast=True)
+        if session_id in processing_locks and processing_locks[session_id]:
+            # Drop frame if busy
+            return
+        processing_locks[session_id] = True
 
     try:
-        pass
-    except Exception:
-        pass
+        # Offload CPU-intensive task to a thread pool
+        # We pass blob instead of frame to decode inside the thread if needed,
+        # but here we already decoded it. Let's move decoding inside if we want to save main thread time.
+        # But for now, let's just offload 'main'
+        result = eventlet.tpool.execute(main, frame)
+
+        if session_id:
+            emit("result", result, room=session_id)
+        else:
+            emit("result", result, broadcast=True)
+    finally:
+        if session_id:
+            processing_locks[session_id] = False
 
 @socketio.on("offer")
 def handle_offer(data):
