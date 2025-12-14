@@ -205,71 +205,72 @@
       // Adaptive detection
       let baselineShoulderY = null;
       // Adaptive detection with rolling baseline
+// Adaptive detection with rolling baseline
 let shoulderYHistory = [];
-const BASELINE_SIZE = 60; // 60 frames = ~4 seconds to establish baseline
-const DETECTION_SIZE = 5; // Use last 5 frames for smoothing current position
-let currentShoulderY = [];
-let baselineEstablished = false;
-let lastBodyData = null; // Store for drawing
+      const BASELINE_SIZE = 45; // Reduced from 60 to 45 for faster baseline
+      const DETECTION_SIZE = 3; // Reduced from 5 to 3 for quicker response
+      let currentShoulderY = [];
+      let baselineEstablished = false;
+      let lastBodyData = null; // Store for drawing
+      
+      socket.on("result", (data) => {
+        const body = data.body;
+        lastBodyData = data; // Store for visualization
+        const leftHand = data.hands.left;
+        const rightHand = data.hands.right;
 
-socket.on("result", (data) => {
-  const body = data.body;
-  lastBodyData = data; // Store for visualization
-  const leftHand = data.hands.left;
-  const rightHand = data.hands.right;
-
-  if (body && body.left_shoulder && body.right_shoulder) {
-    debugInfo.bodyDetected = true;
-    const avgShoulderY = (body.left_shoulder.y + body.right_shoulder.y) / 2;
-    
-    // Only update baseline when standing still (game not playing or in waiting)
-    if (game.state === "waiting" || game.state === "countdown") {
-      shoulderYHistory.push(avgShoulderY);
-      if (shoulderYHistory.length > BASELINE_SIZE) {
-        shoulderYHistory.shift();
-      }
-      if (shoulderYHistory.length >= 30) {
-        baselineEstablished = true;
-        debugInfo.baselineReady = true;
-      }
-    }
-    
-    // Track current position with smoothing
-    currentShoulderY.push(avgShoulderY);
-    if (currentShoulderY.length > DETECTION_SIZE) {
-      currentShoulderY.shift();
-    }
-    
-    if (baselineEstablished && currentShoulderY.length === DETECTION_SIZE) {
-      // Calculate baseline and current averages
-      const baseline = shoulderYHistory.reduce((a, b) => a + b) / shoulderYHistory.length;
-      const current = currentShoulderY.reduce((a, b) => a + b) / currentShoulderY.length;
-      
-      // Calculate difference
-      const diff = current - baseline;
-      
-      debugInfo.baseline = baseline;
-      debugInfo.current = current;
-      debugInfo.diff = diff;
-      
-      // Detect jump - shoulders moved UP (lower Y value)
-      const jumpThreshold = -0.05; // Negative because Y decreases when moving up
-      input.jumping = diff < jumpThreshold;
-      
-      // Detect crouch - shoulders moved DOWN (higher Y value)
-      const crouchThreshold = 0.05; // Positive because Y increases when moving down
-      input.crouching = diff > crouchThreshold;
-      
-      // Debug output
-      if (input.jumping || input.crouching) {
-        console.log(`Baseline: ${baseline.toFixed(3)}, Current: ${current.toFixed(3)}, Diff: ${diff.toFixed(3)}, Jump: ${input.jumping}, Crouch: ${input.crouching}`);
-      }
-    }
-  } else {
-    debugInfo.bodyDetected = false;
-    input.jumping = false;
-    input.crouching = false;
-  }
+        if (body && body.left_shoulder && body.right_shoulder) {
+          debugInfo.bodyDetected = true;
+          const avgShoulderY = (body.left_shoulder.y + body.right_shoulder.y) / 2;
+          
+          // Only update baseline when standing still (game not playing or in waiting)
+          if (game.state === "waiting" || game.state === "countdown") {
+            shoulderYHistory.push(avgShoulderY);
+            if (shoulderYHistory.length > BASELINE_SIZE) {
+              shoulderYHistory.shift();
+            }
+            if (shoulderYHistory.length >= 20) {
+              baselineEstablished = true;
+              debugInfo.baselineReady = true;
+            }
+          }
+          
+          // Track current position with smoothing
+          currentShoulderY.push(avgShoulderY);
+          if (currentShoulderY.length > DETECTION_SIZE) {
+            currentShoulderY.shift();
+          }
+          
+          if (baselineEstablished && currentShoulderY.length === DETECTION_SIZE) {
+            // Calculate baseline and current averages
+            const baseline = shoulderYHistory.reduce((a, b) => a + b) / shoulderYHistory.length;
+            const current = currentShoulderY.reduce((a, b) => a + b) / currentShoulderY.length;
+            
+            // Calculate difference
+            const diff = current - baseline;
+            
+            debugInfo.baseline = baseline;
+            debugInfo.current = current;
+            debugInfo.diff = diff;
+            
+            // Detect jump - shoulders moved UP (lower Y value) - more sensitive
+            const jumpThreshold = -0.04; // Changed from -0.05 to -0.04 for quicker response
+            input.jumping = diff < jumpThreshold;
+            
+            // Detect crouch - shoulders moved DOWN (higher Y value) - more sensitive
+            const crouchThreshold = 0.04; // Changed from 0.05 to 0.04 for quicker response
+            input.crouching = diff > crouchThreshold;
+            
+            // Debug output
+            if (input.jumping || input.crouching) {
+              console.log(`Baseline: ${baseline.toFixed(3)}, Current: ${current.toFixed(3)}, Diff: ${diff.toFixed(3)}, Jump: ${input.jumping}, Crouch: ${input.crouching}`);
+            }
+          }
+        } else {
+          debugInfo.bodyDetected = false;
+          input.jumping = false;
+          input.crouching = false;
+        }
 
   // Detect side-to-side movement using body center
   if (body && body.left_shoulder && body.right_shoulder) {
