@@ -2,23 +2,69 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Stream Viewer</title>
+    <style>
+        body {
+            font-family: "Segoe UI", system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+            margin: 1.5rem;
+        }
+        #infoSection {
+            width: min(900px, 100%);
+            text-align: center;
+        }
+        #resultInfo {
+            width: min(900px, 100%);
+            background: #111;
+            color: #fff;
+            border-radius: 12px;
+            padding: 1rem;
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
 <body>
-here u can scan the qr code
-<img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
-<h2>Live Viewer</h2>
-<img id="stream" />
+<p>Use your mobile device to scan the QR code below. The camera stream stays on your phone, this view only shows recognized keypoints.</p>
+<div id="infoSection">
+    <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
+</div>
+<h2>Live Keypoints</h2>
+<div id="resultInfo">Waiting for data …</div>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
-const img = document.getElementById("stream");
+const sessionId = "{{ session_id }}";
+socket.emit("join_session", { session_id: sessionId });
+const infoDiv = document.getElementById("resultInfo");
 
-socket.on("frame", blob => {
-    const url = URL.createObjectURL(new Blob([blob], {type: "image/jpeg"}));
-    img.src = url;
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+const describeResult = (result) => {
+    if (!result) {
+        return "No keypoints yet.";
+    }
+    const lines = [];
+    if (result.body?.head) {
+        lines.push(`Head: (${result.body.head.x.toFixed(3)}, ${result.body.head.y.toFixed(3)})`);
+    }
+    ["left", "right"].forEach(side => {
+        const hand = result.hands?.[side];
+        if (hand) {
+            lines.push(`${side} hand: ${hand.gesture} (${hand.fingers} fingers) wrist=(${hand.wrist.x.toFixed(3)}, ${hand.wrist.y.toFixed(3)})`);
+        }
+    });
+    if (!lines.length) {
+        lines.push("No body or hand landmarks detected.");
+    }
+    lines.push(`raw JSON: ${JSON.stringify(result)}`);
+    return lines.join("\n");
+};
+
+socket.on("result", result => {
+    infoDiv.textContent = describeResult(result);
 });
 </script>
 </body>

@@ -1,38 +1,156 @@
-<!-- temp_cam_connection.html -->
 <!DOCTYPE html>
 <html>
 <head>
     <title>Handy Camera Stream</title>
+    <style>
+        #streamContainer {
+            position: relative;
+            width: min(800px, 100%);
+            margin-bottom: 0.75rem;
+        }
+        #localVideo,
+        #overlayCanvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #resultInfo {
+            max-width: min(800px, 100%);
+            font-family: "Segoe UI", system-ui, sans-serif;
+            line-height: 1.4;
+        }
+    </style>
 </head>
 <body>
 <h2>Handy Camera Streaming</h2>
-<video id="localVideo" autoplay muted playsinline></video>
+<div id="streamContainer">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <canvas id="overlayCanvas"></canvas>
+</div>
+<div id="resultInfo">Warten auf Keypoints …</div>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
+const sessionId = "{{ session_id }}";
+socket.emit("join_session", { session_id: sessionId });
+
 const video = document.getElementById("localVideo");
+const overlay = document.getElementById("overlayCanvas");
+const overlayCtx = overlay.getContext("2d");
+const infoDiv = document.getElementById("resultInfo");
+
+const setOverlaySize = () => {
+    if (!video.videoWidth || !video.videoHeight) {
+        return;
+    }
+    overlay.width = video.videoWidth;
+    overlay.height = video.videoHeight;
+};
+
+const drawPoint = (ctx, x, y, color, label) => {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (label) {
+        ctx.font = "12px sans-serif";
+        ctx.fillText(label, x + 8, y - 6);
+    }
+};
+
+const drawKeypoints = (result) => {
+    setOverlaySize();
+    const width = overlay.width;
+    const height = overlay.height;
+    overlayCtx.clearRect(0, 0, width, height);
+    if (!result || !width || !height) {
+        return;
+    }
+    const toPx = (value, dimension) => value * dimension;
+    if (result.body) {
+        Object.entries(result.body).forEach(([key, point]) => {
+            if (point && point.x != null && point.y != null) {
+                const px = toPx(point.x, width);
+                const py = toPx(point.y, height);
+                drawPoint(overlayCtx, px, py, "lime", key);
+            }
+        });
+    }
+    ["left", "right"].forEach(side => {
+        const hand = result.hands?.[side];
+        if (hand?.wrist) {
+            const px = toPx(hand.wrist.x, width);
+            const py = toPx(hand.wrist.y, height);
+            const color = side === "left" ? "cyan" : "orange";
+            drawPoint(overlayCtx, px, py, color, `${side} wrist`);
+        }
+    });
+};
+
+const describeResult = (result) => {
+    if (!result) {
+        return "Keine Keypoints detektiert.";
+    }
+    const lines = [];
+    if (result.body?.head) {
+        lines.push(`Kopf: (${result.body.head.x.toFixed(2)}, ${result.body.head.y.toFixed(2)})`);
+    }
+    ["left", "right"].forEach(side => {
+        const hand = result.hands?.[side];
+        if (hand) {
+            lines.push(`${side} Hand: ${hand.gesture} (${hand.fingers} Finger)`);
+        }
+    });
+    return lines.length ? lines.join(" | ") : "Keine Hände erkannt.";
+};
+
+socket.on("result", result => {
+    drawKeypoints(result);
+    infoDiv.textContent = describeResult(result);
+});
+
+video.addEventListener("loadedmetadata", setOverlaySize);
+window.addEventListener("resize", setOverlaySize);
 
 navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-.then(stream => {
-    video.srcObject = stream;
+    .then(stream => {
+        video.srcObject = stream;
+        video.play().catch(() => {});
+    })
+    .catch(err => {
+        console.error("UserMedia error", err);
+        infoDiv.textContent = "Kamera nicht verfügbar.";
+    });
 
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+const captureCanvas = document.createElement("canvas");
+const captureCtx = captureCanvas.getContext("2d");
+let lastSend = 0;
+const sendInterval = 100; // ms
 
-    setInterval(() => {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob(blob => {
-                if(blob) {
-                    socket.emit("frame", blob);
-                }
-            }, "image/jpeg", 0.5);
-        }
-    }, 50); // Send frame every 100ms (~10 FPS)
-});
+const captureLoop = (timestamp) => {
+    if (video.readyState >= video.HAVE_CURRENT_DATA && timestamp - lastSend >= sendInterval) {
+        captureCanvas.width = video.videoWidth;
+        captureCanvas.height = video.videoHeight;
+        captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+        captureCanvas.toBlob(blob => {
+            if (blob) {
+                socket.emit("frame", blob);
+            }
+        }, "image/jpeg", 0.6);
+        lastSend = timestamp;
+    }
+    requestAnimationFrame(captureLoop);
+};
+requestAnimationFrame(captureLoop);
 </script>
 </body>
 </html>

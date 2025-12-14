@@ -1,5 +1,6 @@
 from flask import Flask, render_template
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
+from flask import request
 import socket
 import numpy as np
 import cv2
@@ -12,6 +13,8 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 PORT = int(os.environ.get("PORT", 7000))
+
+stream_sessions = {}
 
 def get_info(result, name):
     # hands
@@ -105,19 +108,40 @@ def session_cam(session_id):
 
 @socketio.on("frame")
 def handle_frame(blob):
+    session_id = stream_sessions.get(request.sid)
+    if session_id:
+        target_room = session_id
+    else:
+        target_room = None
+
     # Send frame to other clients (viewer)
-    emit("frame", blob, broadcast=True, include_self=False)
+    if target_room:
+        emit("frame", blob, room=target_room, include_self=False)
+    else:
+        emit("frame", blob, broadcast=True, include_self=False)
 
     np_arr = np.frombuffer(blob, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    app.last_frame = frame
 
     result = main(frame)
-    emit("result", result)
+    if target_room:
+        emit("result", result, room=target_room)
+    else:
+        emit("result", result)
 
     try:
         print(get_info(result, "body_head_x"), get_info(result, "body_head_y"))
     except Exception:
         pass
+
+@socketio.on("join_session")
+def handle_join(data):
+    session_id = data.get("session_id")
+    if not session_id:
+        return
+    join_room(session_id)
+    stream_sessions[request.sid] = session_id
 
 @socketio.on("offer")
 def handle_offer(data):
@@ -138,6 +162,9 @@ def handle_viewer():
         _, buffer = cv2.imencode(".jpg", app.last_frame)
         emit("frame", buffer.tobytes())
 
+@socketio.on("disconnect")
+def handle_disconnect():
+    stream_sessions.pop(request.sid, None)
 
 if __name__ == "__main__":
     ip = (lambda s: (s.connect(("8.8.8.8", 80)), s.getsockname()[0], s.close())[1])(
