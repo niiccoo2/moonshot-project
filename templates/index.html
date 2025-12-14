@@ -184,6 +184,7 @@
       };
 
       // Camera input with adaptive thresholds
+      // Camera input with adaptive thresholds
       let input = {
         jumping: false,
         crouching: false,
@@ -192,54 +193,95 @@
         movingLeft: false
       };
 
+      // Debug info
+      let debugInfo = {
+        baseline: 0,
+        current: 0,
+        diff: 0,
+        bodyDetected: false,
+        baselineReady: false
+      };
+
       // Adaptive detection
       let baselineShoulderY = null;
-      let shoulderYHistory = [];
-      const HISTORY_SIZE = 30;
+      // Adaptive detection with rolling baseline
+let shoulderYHistory = [];
+const BASELINE_SIZE = 60; // 60 frames = ~4 seconds to establish baseline
+const DETECTION_SIZE = 5; // Use last 5 frames for smoothing current position
+let currentShoulderY = [];
+let baselineEstablished = false;
+let lastBodyData = null; // Store for drawing
+
+socket.on("result", (data) => {
+  const body = data.body;
+  lastBodyData = data; // Store for visualization
+  const leftHand = data.hands.left;
+  const rightHand = data.hands.right;
+
+  if (body && body.left_shoulder && body.right_shoulder) {
+    debugInfo.bodyDetected = true;
+    const avgShoulderY = (body.left_shoulder.y + body.right_shoulder.y) / 2;
+    
+    // Only update baseline when standing still (game not playing or in waiting)
+    if (game.state === "waiting" || game.state === "countdown") {
+      shoulderYHistory.push(avgShoulderY);
+      if (shoulderYHistory.length > BASELINE_SIZE) {
+        shoulderYHistory.shift();
+      }
+      if (shoulderYHistory.length >= 30) {
+        baselineEstablished = true;
+        debugInfo.baselineReady = true;
+      }
+    }
+    
+    // Track current position with smoothing
+    currentShoulderY.push(avgShoulderY);
+    if (currentShoulderY.length > DETECTION_SIZE) {
+      currentShoulderY.shift();
+    }
+    
+    if (baselineEstablished && currentShoulderY.length === DETECTION_SIZE) {
+      // Calculate baseline and current averages
+      const baseline = shoulderYHistory.reduce((a, b) => a + b) / shoulderYHistory.length;
+      const current = currentShoulderY.reduce((a, b) => a + b) / currentShoulderY.length;
       
-      socket.on("result", (data) => {
-        const body = data.body;
-        const leftHand = data.hands.left;
-        const rightHand = data.hands.right;
+      // Calculate difference
+      const diff = current - baseline;
+      
+      debugInfo.baseline = baseline;
+      debugInfo.current = current;
+      debugInfo.diff = diff;
+      
+      // Detect jump - shoulders moved UP (lower Y value)
+      const jumpThreshold = -0.05; // Negative because Y decreases when moving up
+      input.jumping = diff < jumpThreshold;
+      
+      // Detect crouch - shoulders moved DOWN (higher Y value)
+      const crouchThreshold = 0.05; // Positive because Y increases when moving down
+      input.crouching = diff > crouchThreshold;
+      
+      // Debug output
+      if (input.jumping || input.crouching) {
+        console.log(`Baseline: ${baseline.toFixed(3)}, Current: ${current.toFixed(3)}, Diff: ${diff.toFixed(3)}, Jump: ${input.jumping}, Crouch: ${input.crouching}`);
+      }
+    }
+  } else {
+    debugInfo.bodyDetected = false;
+    input.jumping = false;
+    input.crouching = false;
+  }
 
-        if (body && body.left_shoulder && body.right_shoulder) {
-          const avgShoulderY = (body.left_shoulder.y + body.right_shoulder.y) / 2;
-          
-          // Build baseline from standing position
-          shoulderYHistory.push(avgShoulderY);
-          if (shoulderYHistory.length > HISTORY_SIZE) {
-            shoulderYHistory.shift();
-          }
-          
-          if (shoulderYHistory.length >= 10) {
-            // Use median of history as baseline
-            const sorted = [...shoulderYHistory].sort((a, b) => a - b);
-            baselineShoulderY = sorted[Math.floor(sorted.length / 2)];
-            
-            // Detect jump - shoulders significantly above baseline
-            const jumpThreshold = 0.08; // More forgiving threshold
-            input.jumping = avgShoulderY < (baselineShoulderY - jumpThreshold);
-            
-            // Detect crouch - shoulders significantly below baseline
-            const crouchThreshold = 0.08; // More forgiving threshold
-            input.crouching = avgShoulderY > (baselineShoulderY + crouchThreshold);
-          }
-        } else {
-          input.jumping = false;
-          input.crouching = false;
-        }
-
-        // Detect side-to-side movement using body center
-        if (body && body.left_shoulder && body.right_shoulder) {
-          const bodyX = (body.left_shoulder.x + body.right_shoulder.x) / 2;
-          
-          input.movingRight = bodyX > 0.6;
-          input.movingLeft = bodyX < 0.4;
-        } else {
-          input.movingRight = false;
-          input.movingLeft = false;
-        }
-      });
+  // Detect side-to-side movement using body center
+  if (body && body.left_shoulder && body.right_shoulder) {
+    const bodyX = (body.left_shoulder.x + body.right_shoulder.x) / 2;
+    
+    input.movingRight = bodyX > 0.6;
+    input.movingLeft = bodyX < 0.4;
+  } else {
+    input.movingRight = false;
+    input.movingLeft = false;
+  }
+});
 
       // Start game when jumping
       setInterval(() => {
@@ -586,6 +628,92 @@
         gameCtx.stroke();
       }
 
+      function drawBodyKeypoints() {
+  if (!lastBodyData || !lastBodyData.body) return;
+  
+  const body = lastBodyData.body;
+  const scale = gameCanvas.width; // Keypoints are normalized 0-1
+  
+  // Draw function for keypoints
+  function drawPoint(x, y, label, color = "#FF0000") {
+    if (x === null || y === null) return;
+    
+    const px = x * scale;
+    const py = y * gameCanvas.height;
+    
+    gameCtx.fillStyle = color;
+    gameCtx.beginPath();
+    gameCtx.arc(px, py, 10, 0, Math.PI * 2);
+    gameCtx.fill();
+    
+    // Label
+    gameCtx.fillStyle = "#FFFFFF";
+    gameCtx.strokeStyle = "#000000";
+    gameCtx.lineWidth = 3;
+    gameCtx.font = "bold 16px Arial";
+    gameCtx.strokeText(label, px + 15, py + 5);
+    gameCtx.fillText(label, px + 15, py + 5);
+  }
+  
+  // Draw all keypoints
+  drawPoint(body.head.x, body.head.y, "HEAD", "#FF00FF");
+  drawPoint(body.left_shoulder.x, body.left_shoulder.y, "L_SHOULDER", "#00FF00");
+  drawPoint(body.right_shoulder.x, body.right_shoulder.y, "R_SHOULDER", "#00FF00");
+  drawPoint(body.left_elbow.x, body.left_elbow.y, "L_ELBOW", "#0000FF");
+  drawPoint(body.right_elbow.x, body.right_elbow.y, "R_ELBOW", "#0000FF");
+  
+  // Draw skeleton lines
+  gameCtx.strokeStyle = "#FFFF00";
+  gameCtx.lineWidth = 3;
+  
+  // Shoulders line
+  gameCtx.beginPath();
+  gameCtx.moveTo(body.left_shoulder.x * scale, body.left_shoulder.y * gameCanvas.height);
+  gameCtx.lineTo(body.right_shoulder.x * scale, body.right_shoulder.y * gameCanvas.height);
+  gameCtx.stroke();
+  
+  // Left arm
+  gameCtx.beginPath();
+  gameCtx.moveTo(body.left_shoulder.x * scale, body.left_shoulder.y * gameCanvas.height);
+  gameCtx.lineTo(body.left_elbow.x * scale, body.left_elbow.y * gameCanvas.height);
+  gameCtx.stroke();
+  
+  // Right arm
+  gameCtx.beginPath();
+  gameCtx.moveTo(body.right_shoulder.x * scale, body.right_shoulder.y * gameCanvas.height);
+  gameCtx.lineTo(body.right_elbow.x * scale, body.right_elbow.y * gameCanvas.height);
+  gameCtx.stroke();
+}
+
+function drawDebugInfo() {
+  const GROUND = gameCanvas.height * GROUND_RATIO;
+  const debugY = GROUND + 30;
+  
+  // Background for debug info
+  gameCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  gameCtx.fillRect(10, debugY, 500, 180);
+  
+  // Debug text
+  gameCtx.fillStyle = "#FFFFFF";
+  gameCtx.font = "bold 20px Arial";
+  
+  gameCtx.fillText(`Body Detected: ${debugInfo.bodyDetected ? "YES" : "NO"}`, 20, debugY + 30);
+  gameCtx.fillText(`Baseline Ready: ${debugInfo.baselineReady ? "YES" : "NO"}`, 20, debugY + 60);
+  gameCtx.fillText(`Baseline Y: ${debugInfo.baseline.toFixed(3)}`, 20, debugY + 90);
+  gameCtx.fillText(`Current Y: ${debugInfo.current.toFixed(3)}`, 20, debugY + 120);
+  gameCtx.fillText(`Diff: ${debugInfo.diff.toFixed(3)}`, 20, debugY + 150);
+  
+  // Status indicators
+  if (input.jumping) {
+    gameCtx.fillStyle = "#00FF00";
+    gameCtx.fillText("🔼 JUMPING!", 300, debugY + 30);
+  }
+  if (input.crouching) {
+    gameCtx.fillStyle = "#FF6600";
+    gameCtx.fillText("🔽 CROUCHING!", 300, debugY + 60);
+  }
+}
+
       function drawUI() {
         gameCtx.fillStyle = "#000";
         gameCtx.font = "bold 32px Arial";
@@ -685,52 +813,61 @@
       }
 
       function draw() {
-        drawEnvironment();
+  drawEnvironment();
 
-        // Game objects
-        if (game.state === "playing" || game.state === "meteor") {
-          drawCow();
+  // Draw body keypoints overlay
+  drawBodyKeypoints();
 
-          if (game.state === "playing") {
-            game.obstacles.forEach(drawBug);
-          }
+  // Game objects
+  if (game.state === "playing" || game.state === "meteor") {
+    drawCow();
 
-          if (game.state === "meteor") {
-            game.meteors.forEach(drawMeteor);
+    if (game.state === "playing") {
+      game.obstacles.forEach(drawBug);
+    }
 
-            // Instruction
-            gameCtx.fillStyle = "#fff";
-            gameCtx.strokeStyle = "#000";
-            gameCtx.lineWidth = 4;
-            gameCtx.font = "bold 48px Arial";
-            const textX = gameCanvas.width / 2 - 200;
-            gameCtx.strokeText("METEOR SHOWER!", textX, 80);
-            gameCtx.fillText("METEOR SHOWER!", textX, 80);
-            gameCtx.font = "bold 32px Arial";
-            gameCtx.strokeText("Move left/right to dodge!", textX + 20, 130);
-            gameCtx.fillText("Move left/right to dodge!", textX + 20, 130);
-          }
+    if (game.state === "meteor") {
+      game.meteors.forEach(drawMeteor);
 
-          drawUI();
-        }
+      // Instruction
+      gameCtx.fillStyle = "#fff";
+      gameCtx.strokeStyle = "#000";
+      gameCtx.lineWidth = 4;
+      gameCtx.font = "bold 48px Arial";
+      const textX = gameCanvas.width / 2 - 200;
+      gameCtx.strokeText("METEOR SHOWER!", textX, 80);
+      gameCtx.fillText("METEOR SHOWER!", textX, 80);
+      gameCtx.font = "bold 32px Arial";
+      gameCtx.strokeText("Move left/right to dodge!", textX + 20, 130);
+      gameCtx.fillText("Move left/right to dodge!", textX + 20, 130);
+    }
 
-        if (game.state === "waiting") {
-          drawCow();
-          gameCtx.fillStyle = "#fff";
-          gameCtx.strokeStyle = "#000";
-          gameCtx.lineWidth = 4;
-          gameCtx.font = "bold 72px Arial";
-          const titleX = gameCanvas.width / 2 - 320;
-          const titleY = gameCanvas.height / 2 - 80;
-          gameCtx.strokeText("SPACE COW RUNNER", titleX, titleY);
-          gameCtx.fillText("SPACE COW RUNNER", titleX, titleY);
-          gameCtx.font = "bold 36px Arial";
-          gameCtx.strokeText("Jump to start", gameCanvas.width / 2 - 120, titleY + 60);
-          gameCtx.fillText("Jump to start", gameCanvas.width / 2 - 120, titleY + 60);
-          gameCtx.font = "24px Arial";
-          gameCtx.fillText("Jump IRL to jump | Crouch IRL to crouch", gameCanvas.width / 2 - 240, titleY + 110);
-        }
-      }
+    drawUI();
+    drawDebugInfo();
+  }
+
+  if (game.state === "waiting") {
+    drawCow();
+    drawDebugInfo();
+    gameCtx.fillStyle = "#fff";
+    gameCtx.strokeStyle = "#000";
+    gameCtx.lineWidth = 4;
+    gameCtx.font = "bold 72px Arial";
+    const titleX = gameCanvas.width / 2 - 320;
+    const titleY = gameCanvas.height / 2 - 80;
+    gameCtx.strokeText("SPACE COW RUNNER", titleX, titleY);
+    gameCtx.fillText("SPACE COW RUNNER", titleX, titleY);
+    gameCtx.font = "bold 36px Arial";
+    gameCtx.strokeText("Jump to start", gameCanvas.width / 2 - 120, titleY + 60);
+    gameCtx.fillText("Jump to start", gameCanvas.width / 2 - 120, titleY + 60);
+    gameCtx.font = "24px Arial";
+    gameCtx.fillText("Jump IRL to jump | Crouch IRL to crouch", gameCanvas.width / 2 - 240, titleY + 110);
+  }
+  
+  if (game.state === "countdown") {
+    drawDebugInfo();
+  }
+}
 
       function gameLoop() {
         update();
