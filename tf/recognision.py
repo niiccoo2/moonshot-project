@@ -2,7 +2,7 @@ import cv2
 import mediapipe as mp
 
 # ----- MediaPipe Hands -----
-mp_hands = mp.solutions.hands
+mp_hands = mp.solutions.hands #type:ignore
 hands = mp_hands.Hands(
     max_num_hands=2,
     model_complexity=0,
@@ -11,7 +11,7 @@ hands = mp_hands.Hands(
 )
 
 # ----- MediaPipe Pose -----
-mp_pose = mp.solutions.pose
+mp_pose = mp.solutions.pose #type:ignore
 pose = mp_pose.Pose(
     static_image_mode=False,
     model_complexity=0,
@@ -20,7 +20,7 @@ pose = mp_pose.Pose(
     min_tracking_confidence=0.5
 )
 
-mp_drawing = mp.solutions.drawing_utils
+mp_drawing = mp.solutions.drawing_utils #type:ignore
 
 def get_body_keypoints(pose_landmarks):
     if not pose_landmarks:
@@ -83,7 +83,7 @@ def detect_gesture(finger_count):
 
 
 def main(frame):
-    frame = cv2.flip(frame, 1)
+    # frame = cv2.flip(frame, 1)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     hand_results = hands.process(rgb)
@@ -106,8 +106,8 @@ def main(frame):
             finger_count = count_fingers(lm, label)
             gesture = detect_gesture(finger_count)
 
-            wrist_x = 1 - lm.landmark[0].x
-            wrist_y = 1 - lm.landmark[0].y
+            wrist_x = lm.landmark[0].x
+            wrist_y = lm.landmark[0].y
 
             output["hands"][label.lower()] = {
                 "fingers": finger_count,
