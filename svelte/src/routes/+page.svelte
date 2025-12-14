@@ -13,9 +13,6 @@
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 1000 / 15; // 15 fps
 
-	let leftHandPos = { x: 0.5, y: 0.5 };
-	let rightHandPos = { x: 0.5, y: 0.5 };
-
 	let input = {
 		jumping: false,
 		crouching: false,
@@ -32,11 +29,6 @@
 			'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
 		);
 
-		const handLandmarker = await HandLandmarker.createFromOptions(vision, {
-			baseOptions: { modelAssetPath: '/models/hand_landmarker.task' },
-			numHands: 2
-		});
-
 		const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
 			baseOptions: {
 				modelAssetPath: '/models/pose_landmarker_lite.task'
@@ -44,8 +36,6 @@
 			runningMode: 'VIDEO'
 		});
 
-		// Set running mode to VIDEO
-		handLandmarker.setOptions({ runningMode: 'VIDEO' });
 		poseLandmarker.setOptions({ runningMode: 'VIDEO' });
 
 		// Start webcam
@@ -53,35 +43,6 @@
 		video.srcObject = stream;
 
 		await video.play();
-
-		function countFingers(handLandmarks: any, handedness: string) {
-			let fingers = [];
-
-			// Thumb
-			if (handedness == 'Right') {
-				fingers.push(handLandmarks.landmark[4].x > handLandmarks.landmark[3].x);
-			} else {
-				fingers.push(handLandmarks.landmark[4].x < handLandmarks.landmark[3].x);
-			}
-
-			for (const tip of [8, 12, 16, 20]) {
-				fingers.push(handLandmarks.landmark[tip].y < handLandmarks.landmark[Number(tip) - 2].y);
-			}
-
-			const sum = fingers.reduce((acc, b) => acc + (b ? 1 : 0), 0);
-
-			return sum;
-		}
-
-		function detectGesture(fingerCount: number) {
-			if (fingerCount === 0) {
-				return 'closed';
-			} else if (fingerCount === 5) {
-				return 'open';
-			} else {
-				return 'unknown';
-			}
-		}
 
 		function processResults(poseLandmarkerResult: any) {
 			if (!ctx) return;
@@ -95,37 +56,19 @@
 			ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
 			ctx.restore();
 
-			// Check if landmarks exist
-			// if (handLandmarkerResult.landmarks) {
-			// 	handLandmarkerResult.landmarks.forEach((hand: any, index: number) => {
-			// 		if (debug) {
-			// 			console.log(`Hand ${index + 1}:`);
-			// 			console.log('Landmarks:', hand); // raw x, y, z
-			// 			if (handLandmarkerResult.handedness) {
-			// 				console.log('Handedness:', handLandmarkerResult.handedness[index]); // e.g., Right or Left
-			// 			}
-			// 		}
-			// 		if (ctx == null) {
-			// 			return;
-			// 		}
-			// 		// Draw landmarks on canvas
-			// 		ctx.fillStyle = 'red';
-			// 		for (const point of hand) {
-			// 			// ctx.scale(-1, 1);
-			// 			const px = (1 - point.x) * canvas.width; // flip horizontally
-			// 			const py = point.y * canvas.height;
-			// 			ctx.beginPath();
-			// 			ctx.arc(px, py, 5, 0, 2 * Math.PI);
-			// 			ctx.fill();
-			// 		}
-			// 	});
-			// } else {
-			// 	if (debug) {
-			// 		console.log('No hands detected');
-			// 	}
-			// }
 			if (poseLandmarkerResult.landmarks) {
 				poseLandmarkerResult.landmarks.forEach((pose: any, index: number) => {
+					// console.log('Left shoulder:', pose[12].y); // so laggy
+					if (pose[12].y < 0.33) {
+						input.jumping = true;
+						input.crouching = false;
+					} else if (pose[12].y > 0.66) {
+						input.crouching = true;
+						input.jumping = false;
+					} else {
+						input.jumping = false;
+						input.crouching = false;
+					}
 					if (debug) {
 						console.log(`Pose ${index + 1}:`);
 						console.log('Landmarks:', pose);
@@ -153,25 +96,9 @@
 			const process = () => {
 				const now = performance.now();
 				if (now - lastProcessTime > PROCESS_INTERVAL) {
-					// const handLandmarkerResult = handLandmarker.detectForVideo(video, now);
 					const poseLandmarkerResult = poseLandmarker.detectForVideo(video, now);
 					processResults(poseLandmarkerResult);
 
-					// handLandmarkerResult.landmarks.forEach((hand, index) => {
-					// 	const handedness = handLandmarkerResult.handedness[index][0].categoryName; // "Left" or "Right"
-					// 	if (handedness === 'Left') {
-					// 		leftHandPos = { x: -hand[0].x, y: hand[0].y }; // did - because we flip it
-					// 	} else if (handedness === 'Right') {
-					// 		rightHandPos = { x: -hand[0].x, y: hand[0].y }; // idk if this is the best place to do the flip tho
-					// 	}
-					// });
-					// if (handLandmarkerResult.landmarks && handLandmarkerResult.handedness) {
-					// 	handLandmarkerResult.landmarks.forEach((hand: any, index: number) => {
-					// 		const handedness =
-					// 			handLandmarkerResult.handedness[index]?.[0]?.categoryName || 'Right';
-					// 		console.log(countFingers({ landmark: hand }, handedness));
-					// 	});
-					// }
 					lastProcessTime = now;
 				}
 				video.requestVideoFrameCallback(process);
@@ -183,7 +110,32 @@
 	});
 </script>
 
-<video bind:this={video} autoplay playsinline style="transform: scaleX(-1);" class="video-bg" hidden
-></video>
 <canvas bind:this={canvas} width={WIDTH} height={HEIGHT} class="canvas-overlay" hidden></canvas>
-<Game {input} />
+
+<div id="game-root">
+	<Game {input} />
+	<video bind:this={video} autoplay playsinline style="transform: scaleX(-1);" class="video-overlay"
+	></video>
+</div>
+
+<style>
+	.video-overlay {
+		position: absolute;
+		top: 16px;
+		right: 16px;
+		width: 240px;
+		height: 180px;
+		border: 2px solid #fff;
+		border-radius: 8px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+		z-index: 10;
+		background: #000;
+		object-fit: cover;
+	}
+	#game-root {
+		position: relative;
+		width: 100vw;
+		height: 100vh;
+		overflow: hidden;
+	}
+</style>
