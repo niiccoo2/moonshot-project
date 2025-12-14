@@ -83,7 +83,7 @@ def detect_gesture(finger_count):
 
 
 def main(frame):
-    frame = cv2.flip(frame, 1)
+    # frame = cv2.flip(frame, 1)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     hand_results = hands.process(rgb)
@@ -106,8 +106,8 @@ def main(frame):
             finger_count = count_fingers(lm, label)
             gesture = detect_gesture(finger_count)
 
-            wrist_x = 1 - lm.landmark[0].x
-            wrist_y = 1 - lm.landmark[0].y
+            wrist_x = lm.landmark[0].x
+            wrist_y = lm.landmark[0].y
 
             output["hands"][label.lower()] = {
                 "fingers": finger_count,

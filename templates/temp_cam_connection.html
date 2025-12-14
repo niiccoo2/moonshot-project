@@ -7,13 +7,17 @@
 <body>
 <h2>Handy Camera Streaming</h2>
 <p id="status">Waiting for camera...</p>
-<video id="localVideo" autoplay muted playsinline></video>
-better version
+<div style="position: relative; display: inline-block;">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <canvas id="overlay" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+</div>
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
 const video = document.getElementById("localVideo");
 const status = document.getElementById("status");
+const overlay = document.getElementById("overlay");
+const overlayCtx = overlay.getContext("2d");
 
 navigator.mediaDevices.getUserMedia({ video: true, audio: false })
 .then(stream => {
@@ -24,8 +28,19 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: false })
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
+    video.addEventListener('loadedmetadata', () => {
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+    });
+
     setInterval(() => {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            // Ensure overlay matches video size
+            if (overlay.width !== video.videoWidth || overlay.height !== video.videoHeight) {
+                overlay.width = video.videoWidth;
+                overlay.height = video.videoHeight;
+            }
+
             // Reduce resolution for better performance
             const scale = 0.5;
             canvas.width = video.videoWidth * scale;
@@ -41,6 +56,36 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: false })
             }, "image/jpeg", 0.3);
         }
     }, 66); // ~15 FPS
+});
+
+socket.on("result", (data) => {
+    if (overlay.width === 0 || overlay.height === 0) return;
+
+    overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    overlayCtx.fillStyle = "red";
+    overlayCtx.strokeStyle = "red";
+    overlayCtx.lineWidth = 2;
+
+    function drawPoint(x, y) {
+        if (x !== null && y !== null) {
+            const px = x * overlay.width;
+            const py = y * overlay.height;
+            overlayCtx.beginPath();
+            overlayCtx.arc(px, py, 5, 0, 2 * Math.PI);
+            overlayCtx.fill();
+        }
+    }
+
+    if (data.hands) {
+        if (data.hands.left) drawPoint(data.hands.left.wrist.x, data.hands.left.wrist.y);
+        if (data.hands.right) drawPoint(data.hands.right.wrist.x, data.hands.right.wrist.y);
+    }
+
+    if (data.body) {
+        drawPoint(data.body.head.x, data.body.head.y);
+        drawPoint(data.body.left_shoulder.x, data.body.left_shoulder.y);
+        drawPoint(data.body.right_shoulder.x, data.body.right_shoulder.y);
+    }
 });
 </script>
 </body>

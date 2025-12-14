@@ -7,7 +7,7 @@
 <body>
 <div id="connection-status">
     <h3>Scan this QR code with your phone</h3>
-    <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
+    <img src="{{ url_for('static', filename='qr-code-' + session_id + '.png') }}" alt="QR Code">
 </div>
 
 <div id="stream-container" style="display:none; position: relative;">
@@ -21,6 +21,11 @@
     </div>
 </div>
 
+<div id="info-display" style="display:none; background: rgba(255, 255, 255, 0.8); padding: 10px; border-radius: 5px; margin-top: 10px;">
+    <h3>Recognition Info</h3>
+    <pre id="info-content" style="margin: 0;"></pre>
+</div>
+
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
@@ -29,14 +34,22 @@ const container = document.getElementById("stream-container");
 const statusDiv = document.getElementById("connection-status");
 const canvas = document.getElementById("overlay");
 const ctx = canvas.getContext("2d");
+const infoDisplay = document.getElementById("info-display");
+const infoContent = document.getElementById("info-content");
 
 let isConnected = false;
+
+socket.on("connect", () => {
+    console.log("Connected to server");
+    socket.emit("viewer_request");
+});
 
 socket.on("frame", blob => {
     if (!isConnected) {
         isConnected = true;
         statusDiv.style.display = "none";
         container.style.display = "block";
+        infoDisplay.style.display = "block";
     }
 
     const url = URL.createObjectURL(new Blob([blob], {type: "image/jpeg"}));
@@ -80,6 +93,9 @@ socket.on("result", (data) => {
         drawPoint(data.body.left_shoulder.x, data.body.left_shoulder.y);
         drawPoint(data.body.right_shoulder.x, data.body.right_shoulder.y);
     }
+
+    // Update info display
+    infoContent.innerText = JSON.stringify(data, null, 2);
 });
 </script>
 </body>

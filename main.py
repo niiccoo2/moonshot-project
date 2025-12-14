@@ -7,6 +7,7 @@ from tf.recognision import main
 import uuid
 import qrcode as qr
 import os as os
+import time
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -104,14 +105,22 @@ def session_cam(session_id):
 
 @socketio.on("frame")
 def handle_frame(blob):
-    # Send frame to other clients (viewer)
-    emit("frame", blob, broadcast=True, include_self=False)
-
+    # Decode frame
     np_arr = np.frombuffer(blob, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    app.last_frame = frame
+
+    # Only send the first frame of a stream to the viewer
+    current_time = time.time()
+    last_time = getattr(app, "last_frame_time", 0)
+
+    if current_time - last_time > 2.0:
+        emit("frame", blob, broadcast=True, include_self=False)
+
+    app.last_frame_time = current_time
 
     result = main(frame)
-    emit("result", result)
+    emit("result", result, broadcast=True)
 
     try:
         print(f'Head info: x {get_info(result, "body_head_x")}, y {get_info(result, "body_head_y")}')
