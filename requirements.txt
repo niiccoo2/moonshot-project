@@ -4,5 +4,4 @@ numpy
 opencv-python
 mediapipe
 qrcode[pil]
-threading
 gunicorn

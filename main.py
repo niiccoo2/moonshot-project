@@ -157,7 +157,7 @@ def handle_candidate(data):
 
 @socketio.on("viewer_request")
 def handle_viewer():
-    # kann zuletzt verarbeiteten Frame senden
+    # sends last frame to viewer
     if hasattr(app, "last_frame"):
         _, buffer = cv2.imencode(".jpg", app.last_frame)
         emit("frame", buffer.tobytes())
