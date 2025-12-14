@@ -6,16 +6,20 @@
 </head>
 <body>
 <h2>Handy Camera Streaming</h2>
+<p id="status">Waiting for camera...</p>
 <video id="localVideo" autoplay muted playsinline></video>
 better version
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
 const video = document.getElementById("localVideo");
+const status = document.getElementById("status");
 
 navigator.mediaDevices.getUserMedia({ video: true, audio: false })
 .then(stream => {
     video.srcObject = stream;
+    status.innerText = "Streaming active!";
+    status.style.color = "green";
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");

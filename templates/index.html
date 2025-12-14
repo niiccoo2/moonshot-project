@@ -86,20 +86,31 @@
       const ctx = canvas.getContext("2d");
       const socket = io();
 
-      navigator.mediaDevices
-        .getUserMedia({ video: true })
-        .then((stream) => (video.srcObject = stream));
+      // Check for remote mode
+      const urlParams = new URLSearchParams(window.location.search);
+      const isRemote = urlParams.get('remote') === 'true';
 
-      setInterval(() => {
-        ctx.drawImage(video, 0, 0, 320, 240);
-        canvas.toBlob(
-          (blob) => {
-            socket.emit("frame", blob);
-          },
-          "image/jpeg",
-          0.5
-        );
-      }, 66);
+      if (!isRemote) {
+          // Local Camera Mode
+          navigator.mediaDevices
+            .getUserMedia({ video: true })
+            .then((stream) => (video.srcObject = stream));
+
+          setInterval(() => {
+            ctx.drawImage(video, 0, 0, 320, 240);
+            canvas.toBlob(
+              (blob) => {
+                socket.emit("frame", blob);
+              },
+              "image/jpeg",
+              0.5
+            );
+          }, 66);
+      } else {
+          // Remote Mode: Hide local video, listen for server results
+          video.style.display = 'none';
+          console.log("Remote mode active: Listening for socket results...");
+      }
 
       // Game setup
       const gameCanvas = document.getElementById("gameCanvas");

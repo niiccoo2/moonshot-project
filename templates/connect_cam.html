@@ -5,20 +5,81 @@
     <title>Title</title>
 </head>
 <body>
-here u can scan the qr code + and this sentencde is a test to test the server
-<img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
-<h2>Live Viewer</h2>
-<img id="stream" />
+<div id="connection-status">
+    <h3>Scan this QR code with your phone</h3>
+    <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
+</div>
+
+<div id="stream-container" style="display:none; position: relative;">
+    <h2>Live Viewer & Recognition</h2>
+    <p>Connection successful! Recognition is running.</p>
+    <a href="/?remote=true" class="button" style="display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; margin-bottom: 10px;">Start Game with Phone Controller</a>
+    <br>
+    <div style="position: relative; display: inline-block;">
+        <img id="stream" style="display: block;" />
+        <canvas id="overlay" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+    </div>
+</div>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
 const img = document.getElementById("stream");
+const container = document.getElementById("stream-container");
+const statusDiv = document.getElementById("connection-status");
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+
+let isConnected = false;
 
 socket.on("frame", blob => {
+    if (!isConnected) {
+        isConnected = true;
+        statusDiv.style.display = "none";
+        container.style.display = "block";
+    }
+
     const url = URL.createObjectURL(new Blob([blob], {type: "image/jpeg"}));
+    img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        URL.revokeObjectURL(url);
+    };
     img.src = url;
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+});
+
+socket.on("result", (data) => {
+    if (!isConnected || !canvas.width) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "red";
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 2;
+
+    // Helper to draw point
+    function drawPoint(x, y) {
+        if (x !== null && y !== null) {
+            // Coordinates are normalized (0-1), scale to canvas
+            const px = x * canvas.width;
+            const py = y * canvas.height;
+            ctx.beginPath();
+            ctx.arc(px, py, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+    }
+
+    // Draw hands
+    if (data.hands) {
+        if (data.hands.left) drawPoint(data.hands.left.wrist.x, data.hands.left.wrist.y);
+        if (data.hands.right) drawPoint(data.hands.right.wrist.x, data.hands.right.wrist.y);
+    }
+
+    // Draw body
+    if (data.body) {
+        drawPoint(data.body.head.x, data.body.head.y);
+        drawPoint(data.body.left_shoulder.x, data.body.left_shoulder.y);
+        drawPoint(data.body.right_shoulder.x, data.body.right_shoulder.y);
+    }
 });
 </script>
 </body>
