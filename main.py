@@ -8,10 +8,12 @@ import uuid
 import qrcode as qr
 import os as os
 import time
-import eventlet
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+executor = ThreadPoolExecutor(max_workers=4)
 
 PORT = int(os.environ.get("PORT", 7000))
 
@@ -174,7 +176,8 @@ def handle_frame(data):
         # We pass blob instead of frame to decode inside the thread if needed,
         # but here we already decoded it. Let's move decoding inside if we want to save main thread time.
         # But for now, let's just offload 'main'
-        result = eventlet.tpool.execute(main, frame)
+        future = executor.submit(main, frame)
+        result = future.result()
 
         if session_id:
             emit("result", result, room=session_id)
