@@ -188,6 +188,17 @@ def handle_viewer(session_id=None):
         _, buffer = cv2.imencode(".jpg", app.last_frame) #type:ignore
         emit("frame", buffer.tobytes())
 
+@socketio.on("result")
+def handle_result(data):
+    if isinstance(data, dict):
+        session_id = data.get("session_id")
+        result = data.get("result")
+        if session_id:
+            emit("result", result, room=session_id)
+    else:
+        # Fallback or broadcast
+        emit("result", data, broadcast=True)
+
 
 if __name__ == "__main__":
     ip = (lambda s: (s.connect(("8.8.8.8", 80)), s.getsockname()[0], s.close())[1])(
