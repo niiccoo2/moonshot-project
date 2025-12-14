@@ -95,7 +95,6 @@ def connect_cam():
         session_id=session_id
     )
 
-
 @app.route("/connect_cam/<session_id>", methods=["GET", "POST"])
 def session_cam(session_id):
     return render_template(
