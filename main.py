@@ -1,5 +1,6 @@
-from flask import Flask, render_template, session, request
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask import Flask, render_template
+from flask_socketio import SocketIO, emit, join_room
+from flask import request
 import socket
 import numpy as np
 import cv2
@@ -7,15 +8,13 @@ from tf.recognision import main
 import uuid
 import qrcode as qr
 import os as os
-import time
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
-executor = ThreadPoolExecutor(max_workers=4)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 PORT = int(os.environ.get("PORT", 7000))
+
+stream_sessions = {}
 
 def get_info(result, name):
     # hands
@@ -92,12 +91,13 @@ def connect_cam():
     # make sure that the path to the qr code exists
     os.makedirs(os.path.join("static", "qr_code"), exist_ok=True)
     img = qr.make(link)
-    img.save(os.path.join("static", "qr_code", f"qr-code-{session_id}.png")) #type:ignore
+    img.save(os.path.join("static", "qr_code", f"qr-code-{session_id}.png"))
 
     return render_template(
         "connect_cam.html",
         session_id=session_id
     )
+
 
 @app.route("/connect_cam/<session_id>", methods=["GET", "POST"])
 def session_cam(session_id):
@@ -106,88 +106,42 @@ def session_cam(session_id):
         session_id=session_id
     )
 
-# Global lock for session processing to drop frames if busy
-processing_locks = {}
-
-def process_frame_task(blob):
-    np_arr = np.frombuffer(blob, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    result = main(frame)
-    return frame, result
-
-@socketio.on("join_session")
-def handle_join_session(session_id):
-    join_room(session_id)
-    print(f"Client joined session: {session_id}")
-
 @socketio.on("frame")
-def handle_frame(data):
-    if isinstance(data, dict):
-        blob = data.get("blob")
-        session_id = data.get("session_id")
+def handle_frame(blob):
+    session_id = stream_sessions.get(request.sid)
+    if session_id:
+        target_room = session_id
     else:
-        # Fallback for old clients or if data is just blob
-        blob = data
-        session_id = None # Broadcast to all if no session_id? Or just don't support it.
+        target_room = None
 
-    if not blob:
-        return
+    # Send frame to other clients (viewer)
+    if target_room:
+        emit("frame", blob, room=target_room, include_self=False)
+    else:
+        emit("frame", blob, broadcast=True, include_self=False)
 
-    # Decode frame
     np_arr = np.frombuffer(blob, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    app.last_frame = frame
 
-    # Store last frame per session if needed, or global for simple fallback
-    if session_id:
-        if not hasattr(app, "session_frames"):
-            app.session_frames = {}
-        app.session_frames[session_id] = frame
+    result = main(frame)
+    if target_room:
+        emit("result", result, room=target_room)
     else:
-        app.last_frame = frame
-
-    # Only send the first frame of a stream to the viewer
-    # We need to track time per session
-    current_time = time.time()
-
-    if session_id:
-        if not hasattr(app, "session_times"):
-            app.session_times = {}
-        last_time = app.session_times.get(session_id, 0)
-
-        if last_time == 0:
-             emit("frame", blob, room=session_id, include_self=False)
-             # Update time only if we sent a frame
-             app.session_times[session_id] = current_time
-    else:
-        last_time = getattr(app, "last_frame_time", 0)
-        if current_time - last_time > 2.0:
-            emit("frame", blob, broadcast=True, include_self=False)
-            app.last_frame_time = current_time
-
-    # Check if we are already processing a frame for this session
-    if session_id:
-        if session_id in processing_locks and processing_locks[session_id]:
-            # Drop frame if busy
-            return
-        processing_locks[session_id] = True
+        emit("result", result)
 
     try:
-        # Offload CPU-intensive task to a thread pool
-        # We pass blob instead of frame to decode inside the thread if needed,
-        # but here we already decoded it. Let's move decoding inside if we want to save main thread time.
-        # But for now, let's just offload 'main'
-        future = executor.submit(main, frame)
-        result = future.result()
+        print(get_info(result, "body_head_x"), get_info(result, "body_head_y"))
+    except Exception:
+        pass
 
-        if session_id:
-            emit("result", result, room=session_id)
-        else:
-            emit("result", result, broadcast=True)
-    except Exception as e:
-        print(f"Error processing frame: {e}")
-    finally:
-        if session_id:
-            processing_locks[session_id] = False
+@socketio.on("join_session")
+def handle_join(data):
+    session_id = data.get("session_id")
+    if not session_id:
+        return
+    join_room(session_id)
+    stream_sessions[request.sid] = session_id
 
 @socketio.on("offer")
 def handle_offer(data):
@@ -202,33 +156,19 @@ def handle_candidate(data):
     emit("ice-candidate", data, broadcast=True, include_self=False)
 
 @socketio.on("viewer_request")
-def handle_viewer(session_id=None):
-    if session_id:
-        join_room(session_id)
-        print(f"Viewer joined session: {session_id}")
-        if hasattr(app, "session_frames") and session_id in app.session_frames:
-             _, buffer = cv2.imencode(".jpg", app.session_frames[session_id]) #type:ignore
-             emit("frame", buffer.tobytes(), room=session_id)
-    elif hasattr(app, "last_frame"):
-        _, buffer = cv2.imencode(".jpg", app.last_frame) #type:ignore
+def handle_viewer():
+    # kann zuletzt verarbeiteten Frame senden
+    if hasattr(app, "last_frame"):
+        _, buffer = cv2.imencode(".jpg", app.last_frame)
         emit("frame", buffer.tobytes())
 
-@socketio.on("result")
-def handle_result(data):
-    if isinstance(data, dict):
-        session_id = data.get("session_id")
-        result = data.get("result")
-        if session_id:
-            emit("result", result, room=session_id)
-    else:
-        # Fallback or broadcast
-        emit("result", data, broadcast=True)
-
+@socketio.on("disconnect")
+def handle_disconnect():
+    stream_sessions.pop(request.sid, None)
 
 if __name__ == "__main__":
     ip = (lambda s: (s.connect(("8.8.8.8", 80)), s.getsockname()[0], s.close())[1])(
         socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
 
     print(f"Server running under:\nPC: http://127.0.0.1:{PORT}\nWLAN: http://{ip}:{PORT}/")
-    socketio.run(app, host="0.0.0.0", port=5002)
-# update to aolder version for server
+    socketio.run(app, host="0.0.0.0", port=7000)
