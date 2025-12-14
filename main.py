@@ -180,6 +180,8 @@ def handle_frame(data):
             emit("result", result, room=session_id)
         else:
             emit("result", result, broadcast=True)
+    except Exception as e:
+        print(f"Error processing frame: {e}")
     finally:
         if session_id:
             processing_locks[session_id] = False
