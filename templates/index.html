@@ -8,24 +8,23 @@
         margin: 0;
         padding: 0;
         font-family: "Arial", sans-serif;
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
         overflow: hidden;
       }
       #gameCanvas {
         display: block;
-        margin: 0 auto;
-        background: #87ceeb;
-        image-rendering: pixelated;
+        width: 100vw;
+        height: 100vh;
       }
       #video {
         position: absolute;
         top: 10px;
         right: 10px;
-        width: 160px;
-        height: 120px;
+        width: 200px;
+        height: 150px;
         border: 3px solid white;
         border-radius: 8px;
         transform: scaleX(-1);
+        z-index: 100;
       }
       #canvas {
         display: none;
@@ -35,10 +34,10 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        font-size: 120px;
+        font-size: 150px;
         font-weight: bold;
         color: white;
-        text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.8);
+        text-shadow: 5px 5px 10px rgba(0, 0, 0, 0.9);
         display: none;
         z-index: 10;
       }
@@ -47,26 +46,27 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.9);
-        padding: 40px;
-        border-radius: 15px;
+        background: rgba(0, 0, 0, 0.95);
+        padding: 60px;
+        border-radius: 20px;
         text-align: center;
         display: none;
         color: white;
+        z-index: 10;
       }
       #gameOver h1 {
-        margin: 0 0 20px 0;
-        font-size: 48px;
+        margin: 0 0 30px 0;
+        font-size: 64px;
         color: #ff4444;
       }
       #gameOver p {
-        margin: 10px 0;
-        font-size: 24px;
+        margin: 15px 0;
+        font-size: 32px;
       }
     </style>
   </head>
   <body>
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <canvas id="gameCanvas"></canvas>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" width="320" height="240"></canvas>
     <div id="countdown"></div>
@@ -74,8 +74,8 @@
       <h1>GAME OVER</h1>
       <p id="finalScore"></p>
       <p id="finalLevel"></p>
-      <p style="font-size: 18px; margin-top: 20px">
-        Raise both hands to play again
+      <p style="font-size: 24px; margin-top: 30px">
+        Jump to play again
       </p>
     </div>
 
@@ -86,38 +86,33 @@
       const ctx = canvas.getContext("2d");
       const socket = io();
 
-      // Check for remote mode
-      const urlParams = new URLSearchParams(window.location.search);
-      const isRemote = urlParams.get('remote') === 'true';
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((stream) => (video.srcObject = stream));
 
-      if (!isRemote) {
-          // Local Camera Mode
-          navigator.mediaDevices
-            .getUserMedia({ video: true })
-            .then((stream) => (video.srcObject = stream));
+      setInterval(() => {
+        ctx.drawImage(video, 0, 0, 320, 240);
+        canvas.toBlob(
+          (blob) => {
+            socket.emit("frame", blob);
+          },
+          "image/jpeg",
+          0.5
+        );
+      }, 66);
 
-          setInterval(() => {
-            ctx.drawImage(video, 0, 0, 320, 240);
-            canvas.toBlob(
-              (blob) => {
-                socket.emit("frame", blob);
-              },
-              "image/jpeg",
-              0.5
-            );
-          }, 66);
-      } else {
-          // Remote Mode: Hide local video, listen for server results
-          video.style.display = 'none';
-          console.log("Remote mode active: Listening for socket results...");
-      }
-
-      // Game setup
+      // Game setup - fullscreen canvas
       const gameCanvas = document.getElementById("gameCanvas");
       const gameCtx = gameCanvas.getContext("2d");
-      const WIDTH = 800;
-      const HEIGHT = 400;
-      const GROUND = 320;
+      
+      function resizeCanvas() {
+        gameCanvas.width = window.innerWidth;
+        gameCanvas.height = window.innerHeight;
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      const GROUND_RATIO = 0.75; // Ground at 75% down the screen
 
       // Audio synthesis
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -167,16 +162,16 @@
 
       // Game state
       let game = {
-        state: "waiting", // waiting, countdown, playing, meteor, gameOver
+        state: "waiting",
         level: 1,
         score: 0,
-        speed: 5,
+        speed: 6,
         countdown: 3,
         player: {
-          x: 100,
-          y: GROUND - 50,
-          width: 50,
-          height: 50,
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 100,
           velocityY: 0,
           grounded: true,
           crouching: false,
@@ -188,84 +183,82 @@
         levelGoal: 10,
       };
 
-      // Camera input
+      // Camera input with adaptive thresholds
       let input = {
-        handsRaised: false,
+        jumping: false,
         crouching: false,
-        prevHandsRaised: false,
+        prevJumping: false,
+        movingRight: false,
+        movingLeft: false
       };
 
-      // Store previous body positions for jump detection
-      let prevBodyY = null;
-      let bodyVelocity = 0;
-
+      // Adaptive detection
+      let baselineShoulderY = null;
+      let shoulderYHistory = [];
+      const HISTORY_SIZE = 30;
+      
       socket.on("result", (data) => {
+        const body = data.body;
         const leftHand = data.hands.left;
         const rightHand = data.hands.right;
-        const body = data.body;
 
-        // Detect jump by body movement (shoulders moving up rapidly)
         if (body && body.left_shoulder && body.right_shoulder) {
-          const avgShoulderY =
-            (body.left_shoulder.y + body.right_shoulder.y) / 2;
-
-          if (prevBodyY !== null) {
-            const deltaY = prevBodyY - avgShoulderY; // Positive when moving up
-            bodyVelocity = deltaY;
-
-            // Jump detected when body moves up rapidly
-            input.handsRaised = deltaY > 0.02; // Threshold for jump detection
+          const avgShoulderY = (body.left_shoulder.y + body.right_shoulder.y) / 2;
+          
+          // Build baseline from standing position
+          shoulderYHistory.push(avgShoulderY);
+          if (shoulderYHistory.length > HISTORY_SIZE) {
+            shoulderYHistory.shift();
           }
-
-          prevBodyY = avgShoulderY;
+          
+          if (shoulderYHistory.length >= 10) {
+            // Use median of history as baseline
+            const sorted = [...shoulderYHistory].sort((a, b) => a - b);
+            baselineShoulderY = sorted[Math.floor(sorted.length / 2)];
+            
+            // Detect jump - shoulders significantly above baseline
+            const jumpThreshold = 0.08; // More forgiving threshold
+            input.jumping = avgShoulderY < (baselineShoulderY - jumpThreshold);
+            
+            // Detect crouch - shoulders significantly below baseline
+            const crouchThreshold = 0.08; // More forgiving threshold
+            input.crouching = avgShoulderY > (baselineShoulderY + crouchThreshold);
+          }
         } else {
-          prevBodyY = null;
-          input.handsRaised = false;
-        }
-
-        // Detect crouch by body position (shoulders lowered)
-        if (body && body.left_shoulder && body.right_shoulder) {
-          const avgShoulderY =
-            (body.left_shoulder.y + body.right_shoulder.y) / 2;
-          // Crouch when shoulders are lower than usual (higher Y value)
-          input.crouching = avgShoulderY > 0.6; // Threshold for crouch
-        } else {
+          input.jumping = false;
           input.crouching = false;
         }
 
-        // Detect side-to-side movement using wrists
-        if (leftHand && rightHand) {
-          const avgWristX = (leftHand.wrist.x + rightHand.wrist.x) / 2;
-
-          // Moving right (wrists on right side of frame)
-          input.movingRight = avgWristX > 0.6;
-
-          // Moving left (wrists on left side of frame)
-          input.movingLeft = avgWristX < 0.4;
+        // Detect side-to-side movement using body center
+        if (body && body.left_shoulder && body.right_shoulder) {
+          const bodyX = (body.left_shoulder.x + body.right_shoulder.x) / 2;
+          
+          input.movingRight = bodyX > 0.6;
+          input.movingLeft = bodyX < 0.4;
         } else {
           input.movingRight = false;
           input.movingLeft = false;
         }
       });
 
-      // Start game when hands raised
+      // Start game when jumping
       setInterval(() => {
         if (
           game.state === "waiting" &&
-          input.handsRaised &&
-          !input.prevHandsRaised
+          input.jumping &&
+          !input.prevJumping
         ) {
           startCountdown();
         }
         if (
           game.state === "gameOver" &&
-          input.handsRaised &&
-          !input.prevHandsRaised
+          input.jumping &&
+          !input.prevJumping
         ) {
           resetGame();
           startCountdown();
         }
-        input.prevHandsRaised = input.handsRaised;
+        input.prevJumping = input.jumping;
       }, 100);
 
       // Keyboard backup
@@ -316,7 +309,7 @@
 
       function jump() {
         if (game.player.grounded && !game.player.crouching) {
-          game.player.velocityY = -15;
+          game.player.velocityY = -20;
           game.player.grounded = false;
           playJump();
         }
@@ -325,28 +318,29 @@
       function crouch() {
         if (game.player.grounded) {
           game.player.crouching = true;
-          game.player.height = 25;
+          game.player.height = 50;
           playCrouch();
         }
       }
 
       function unCrouch() {
         game.player.crouching = false;
-        game.player.height = 50;
+        game.player.height = 100;
       }
 
       function resetGame() {
+        const GROUND = gameCanvas.height * GROUND_RATIO;
         game = {
           state: "waiting",
           level: 1,
           score: 0,
-          speed: 5,
+          speed: 6,
           countdown: 3,
           player: {
-            x: 100,
-            y: GROUND - 50,
-            width: 50,
-            height: 50,
+            x: gameCanvas.width * 0.15,
+            y: GROUND - 100,
+            width: 120,
+            height: 100,
             velocityY: 0,
             grounded: true,
             crouching: false,
@@ -361,12 +355,13 @@
       }
 
       function spawnObstacle() {
+        const GROUND = gameCanvas.height * GROUND_RATIO;
         const type = Math.random() > 0.5 ? "bug-high" : "bug-low";
         game.obstacles.push({
-          x: WIDTH,
-          y: type === "bug-low" ? GROUND - 30 : GROUND - 80,
-          width: 30,
-          height: 30,
+          x: gameCanvas.width,
+          y: type === "bug-low" ? GROUND - 60 : GROUND - 140,
+          width: 80,
+          height: 60,
           type: type,
         });
       }
@@ -384,15 +379,14 @@
         game.state = "meteor";
         game.meteors = [];
 
-        // Spawn meteors
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 20; i++) {
           setTimeout(() => {
             game.meteors.push({
-              x: Math.random() * WIDTH,
-              y: -20,
-              size: 20 + Math.random() * 20,
-              speedY: 3 + Math.random() * 4,
-              speedX: (Math.random() - 0.5) * 2,
+              x: Math.random() * gameCanvas.width,
+              y: -50,
+              size: 50 + Math.random() * 40,
+              speedY: 4 + Math.random() * 5,
+              speedX: (Math.random() - 0.5) * 3,
             });
           }, i * 200);
         }
@@ -423,96 +417,190 @@
       }
 
       // Draw functions
-      function drawPlayer() {
-        // Space cow
+      function drawCow() {
+        const x = game.player.x;
+        const y = game.player.y;
+        const w = game.player.width;
+        const h = game.player.height;
+        
+        // Body (white)
         gameCtx.fillStyle = "#fff";
-        gameCtx.fillRect(
-          game.player.x,
-          game.player.y,
-          game.player.width,
-          game.player.height
-        );
-
-        // Spots
+        gameCtx.fillRect(x + w * 0.2, y + h * 0.3, w * 0.6, h * 0.5);
+        
+        // Head
+        gameCtx.fillRect(x + w * 0.6, y + h * 0.1, w * 0.35, h * 0.4);
+        
+        // Spots (black)
         gameCtx.fillStyle = "#000";
-        gameCtx.fillRect(game.player.x + 10, game.player.y + 10, 12, 12);
-        gameCtx.fillRect(game.player.x + 30, game.player.y + 15, 10, 10);
-        if (!game.player.crouching) {
-          gameCtx.fillRect(game.player.x + 15, game.player.y + 30, 15, 10);
-        }
-
+        gameCtx.beginPath();
+        gameCtx.arc(x + w * 0.35, y + h * 0.45, w * 0.12, 0, Math.PI * 2);
+        gameCtx.fill();
+        gameCtx.beginPath();
+        gameCtx.arc(x + w * 0.55, y + h * 0.6, w * 0.1, 0, Math.PI * 2);
+        gameCtx.fill();
+        
         // Eyes
         gameCtx.fillStyle = "#000";
-        gameCtx.fillRect(game.player.x + 35, game.player.y + 8, 5, 5);
-
-        // Horns (if not crouching)
+        gameCtx.fillRect(x + w * 0.75, y + h * 0.2, w * 0.08, h * 0.08);
+        
+        // Snout
+        gameCtx.fillStyle = "#FFB6C1";
+        gameCtx.fillRect(x + w * 0.88, y + h * 0.3, w * 0.1, h * 0.15);
+        gameCtx.fillStyle = "#000";
+        gameCtx.fillRect(x + w * 0.9, y + h * 0.35, w * 0.03, h * 0.03);
+        gameCtx.fillRect(x + w * 0.95, y + h * 0.35, w * 0.03, h * 0.03);
+        
         if (!game.player.crouching) {
+          // Horns (brown)
           gameCtx.fillStyle = "#8B4513";
-          gameCtx.fillRect(game.player.x + 5, game.player.y - 5, 5, 8);
-          gameCtx.fillRect(game.player.x + 40, game.player.y - 5, 5, 8);
+          gameCtx.beginPath();
+          gameCtx.moveTo(x + w * 0.65, y + h * 0.1);
+          gameCtx.lineTo(x + w * 0.6, y);
+          gameCtx.lineTo(x + w * 0.7, y + h * 0.05);
+          gameCtx.fill();
+          
+          gameCtx.beginPath();
+          gameCtx.moveTo(x + w * 0.85, y + h * 0.1);
+          gameCtx.lineTo(x + w * 0.9, y);
+          gameCtx.lineTo(x + w * 0.8, y + h * 0.05);
+          gameCtx.fill();
+          
+          // Legs
+          gameCtx.fillStyle = "#fff";
+          gameCtx.fillRect(x + w * 0.25, y + h * 0.8, w * 0.12, h * 0.2);
+          gameCtx.fillRect(x + w * 0.45, y + h * 0.8, w * 0.12, h * 0.2);
+          gameCtx.fillRect(x + w * 0.55, y + h * 0.8, w * 0.12, h * 0.2);
+          
+          // Tail
+          gameCtx.strokeStyle = "#fff";
+          gameCtx.lineWidth = 4;
+          gameCtx.beginPath();
+          gameCtx.moveTo(x + w * 0.2, y + h * 0.5);
+          gameCtx.quadraticCurveTo(x + w * 0.1, y + h * 0.4, x + w * 0.05, y + h * 0.6);
+          gameCtx.stroke();
         }
       }
 
-      function drawObstacle(obs) {
-        // Bug
-        gameCtx.fillStyle = "#8B4513";
-        gameCtx.fillRect(obs.x, obs.y, obs.width, obs.height);
-
+      function drawBug(obs) {
+        const x = obs.x;
+        const y = obs.y;
+        const w = obs.width;
+        const h = obs.height;
+        
+        // Body segments (green/brown bug)
+        gameCtx.fillStyle = "#6B8E23";
+        gameCtx.beginPath();
+        gameCtx.ellipse(x + w * 0.3, y + h * 0.5, w * 0.25, h * 0.35, 0, 0, Math.PI * 2);
+        gameCtx.fill();
+        gameCtx.beginPath();
+        gameCtx.ellipse(x + w * 0.6, y + h * 0.5, w * 0.3, h * 0.4, 0, 0, Math.PI * 2);
+        gameCtx.fill();
+        
+        // Head
+        gameCtx.fillStyle = "#556B2F";
+        gameCtx.beginPath();
+        gameCtx.arc(x + w * 0.85, y + h * 0.4, w * 0.2, 0, Math.PI * 2);
+        gameCtx.fill();
+        
         // Wings
         gameCtx.fillStyle = "rgba(139, 69, 19, 0.5)";
-        gameCtx.fillRect(obs.x - 10, obs.y + 5, 10, 20);
-        gameCtx.fillRect(obs.x + obs.width, obs.y + 5, 10, 20);
-
+        gameCtx.beginPath();
+        gameCtx.ellipse(x + w * 0.5, y + h * 0.3, w * 0.3, h * 0.5, -0.5, 0, Math.PI * 2);
+        gameCtx.fill();
+        gameCtx.beginPath();
+        gameCtx.ellipse(x + w * 0.5, y + h * 0.7, w * 0.3, h * 0.5, 0.5, 0, Math.PI * 2);
+        gameCtx.fill();
+        
+        // Antennae
+        gameCtx.strokeStyle = "#556B2F";
+        gameCtx.lineWidth = 3;
+        gameCtx.beginPath();
+        gameCtx.moveTo(x + w * 0.85, y + h * 0.3);
+        gameCtx.lineTo(x + w * 0.95, y + h * 0.1);
+        gameCtx.stroke();
+        gameCtx.beginPath();
+        gameCtx.moveTo(x + w * 0.85, y + h * 0.3);
+        gameCtx.lineTo(x + w * 0.95, y + h * 0.15);
+        gameCtx.stroke();
+        
         // Eyes
-        gameCtx.fillStyle = "#fff";
-        gameCtx.fillRect(obs.x + 5, obs.y + 5, 5, 5);
-        gameCtx.fillRect(obs.x + 20, obs.y + 5, 5, 5);
+        gameCtx.fillStyle = "#000";
+        gameCtx.beginPath();
+        gameCtx.arc(x + w * 0.9, y + h * 0.35, w * 0.05, 0, Math.PI * 2);
+        gameCtx.fill();
       }
 
       function drawMeteor(meteor) {
+        const size = meteor.size;
+        
+        // Main meteor body
         gameCtx.fillStyle = "#8B0000";
         gameCtx.beginPath();
-        gameCtx.arc(meteor.x, meteor.y, meteor.size / 2, 0, Math.PI * 2);
+        gameCtx.arc(meteor.x, meteor.y, size / 2, 0, Math.PI * 2);
+        gameCtx.fill();
+        
+        // Crater details
+        gameCtx.fillStyle = "#660000";
+        gameCtx.beginPath();
+        gameCtx.arc(meteor.x - size * 0.15, meteor.y - size * 0.15, size * 0.15, 0, Math.PI * 2);
+        gameCtx.fill();
+        gameCtx.beginPath();
+        gameCtx.arc(meteor.x + size * 0.2, meteor.y + size * 0.1, size * 0.1, 0, Math.PI * 2);
         gameCtx.fill();
 
-        // Flame trail
+        // Flame trail (larger)
         gameCtx.fillStyle = "#FF4500";
         gameCtx.beginPath();
-        gameCtx.arc(
-          meteor.x - 5,
-          meteor.y - 5,
-          meteor.size / 3,
-          0,
-          Math.PI * 2
-        );
+        gameCtx.arc(meteor.x - size * 0.4, meteor.y - size * 0.4, size * 0.35, 0, Math.PI * 2);
+        gameCtx.fill();
+        
+        gameCtx.fillStyle = "#FFA500";
+        gameCtx.beginPath();
+        gameCtx.arc(meteor.x - size * 0.6, meteor.y - size * 0.6, size * 0.25, 0, Math.PI * 2);
         gameCtx.fill();
       }
 
-      function drawGround() {
-        gameCtx.fillStyle = "#90EE90";
-        gameCtx.fillRect(0, GROUND, WIDTH, HEIGHT - GROUND);
-
+      function drawEnvironment() {
+        const GROUND = gameCanvas.height * GROUND_RATIO;
+        
+        // Sky gradient
+        const skyGradient = gameCtx.createLinearGradient(0, 0, 0, GROUND);
+        skyGradient.addColorStop(0, "#87CEEB");
+        skyGradient.addColorStop(1, "#B0E0E6");
+        gameCtx.fillStyle = skyGradient;
+        gameCtx.fillRect(0, 0, gameCanvas.width, GROUND);
+        
+        // Ground gradient
+        const groundGradient = gameCtx.createLinearGradient(0, GROUND, 0, gameCanvas.height);
+        groundGradient.addColorStop(0, "#90EE90");
+        groundGradient.addColorStop(1, "#32CD32");
+        gameCtx.fillStyle = groundGradient;
+        gameCtx.fillRect(0, GROUND, gameCanvas.width, gameCanvas.height - GROUND);
+        
+        // Ground line
         gameCtx.strokeStyle = "#228B22";
-        gameCtx.lineWidth = 3;
+        gameCtx.lineWidth = 5;
         gameCtx.beginPath();
         gameCtx.moveTo(0, GROUND);
-        gameCtx.lineTo(WIDTH, GROUND);
+        gameCtx.lineTo(gameCanvas.width, GROUND);
         gameCtx.stroke();
       }
 
       function drawUI() {
         gameCtx.fillStyle = "#000";
-        gameCtx.font = "bold 20px Arial";
-        gameCtx.fillText(`Level: ${game.level}`, 10, 30);
-        gameCtx.fillText(`Score: ${game.score}`, 10, 60);
-        gameCtx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 10, 90);
+        gameCtx.font = "bold 32px Arial";
+        gameCtx.fillText(`Level: ${game.level}`, 20, 50);
+        gameCtx.fillText(`Score: ${game.score}`, 20, 90);
+        gameCtx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 130);
       }
 
       // Game loop
       function update() {
+        const GROUND = gameCanvas.height * GROUND_RATIO;
+        
         if (game.state === "playing") {
           // Camera input handling
-          if (input.handsRaised && !input.prevHandsRaised) {
+          if (input.jumping && !input.prevJumping) {
             jump();
           }
           if (input.crouching && !game.player.crouching) {
@@ -522,7 +610,7 @@
           }
 
           // Physics
-          game.player.velocityY += 0.8;
+          game.player.velocityY += 1;
           game.player.y += game.player.velocityY;
 
           if (game.player.y >= GROUND - game.player.height) {
@@ -561,14 +649,14 @@
 
         if (game.state === "meteor") {
           // Player can move left/right during meteors
-          if (input.handsRaised) {
+          if (input.movingRight) {
             game.player.x = Math.min(
-              WIDTH - game.player.width,
-              game.player.x + 8
+              gameCanvas.width - game.player.width,
+              game.player.x + 10
             );
           }
-          if (input.crouching) {
-            game.player.x = Math.max(0, game.player.x - 8);
+          if (input.movingLeft) {
+            game.player.x = Math.max(0, game.player.x - 10);
           }
 
           // Update meteors
@@ -589,7 +677,7 @@
               return;
             }
 
-            if (m.y > HEIGHT) {
+            if (m.y > gameCanvas.height) {
               game.meteors.splice(i, 1);
             }
           }
@@ -597,19 +685,14 @@
       }
 
       function draw() {
-        // Sky
-        gameCtx.fillStyle = "#87CEEB";
-        gameCtx.fillRect(0, 0, WIDTH, HEIGHT);
-
-        // Ground
-        drawGround();
+        drawEnvironment();
 
         // Game objects
         if (game.state === "playing" || game.state === "meteor") {
-          drawPlayer();
+          drawCow();
 
           if (game.state === "playing") {
-            game.obstacles.forEach(drawObstacle);
+            game.obstacles.forEach(drawBug);
           }
 
           if (game.state === "meteor") {
@@ -618,50 +701,34 @@
             // Instruction
             gameCtx.fillStyle = "#fff";
             gameCtx.strokeStyle = "#000";
-            gameCtx.lineWidth = 3;
-            gameCtx.font = "bold 30px Arial";
-            gameCtx.strokeText("METEOR SHOWER!", WIDTH / 2 - 150, 50);
-            gameCtx.fillText("METEOR SHOWER!", WIDTH / 2 - 150, 50);
-            gameCtx.font = "bold 20px Arial";
-            gameCtx.strokeText("Move to dodge!", WIDTH / 2 - 80, 80);
-            gameCtx.fillText("Move to dodge!", WIDTH / 2 - 80, 80);
+            gameCtx.lineWidth = 4;
+            gameCtx.font = "bold 48px Arial";
+            const textX = gameCanvas.width / 2 - 200;
+            gameCtx.strokeText("METEOR SHOWER!", textX, 80);
+            gameCtx.fillText("METEOR SHOWER!", textX, 80);
+            gameCtx.font = "bold 32px Arial";
+            gameCtx.strokeText("Move left/right to dodge!", textX + 20, 130);
+            gameCtx.fillText("Move left/right to dodge!", textX + 20, 130);
           }
 
           drawUI();
         }
 
         if (game.state === "waiting") {
+          drawCow();
           gameCtx.fillStyle = "#fff";
           gameCtx.strokeStyle = "#000";
-          gameCtx.lineWidth = 3;
-          gameCtx.font = "bold 48px Arial";
-          gameCtx.strokeText(
-            "SPACE COW RUNNER",
-            WIDTH / 2 - 220,
-            HEIGHT / 2 - 50
-          );
-          gameCtx.fillText(
-            "SPACE COW RUNNER",
-            WIDTH / 2 - 220,
-            HEIGHT / 2 - 50
-          );
-          gameCtx.font = "bold 24px Arial";
-          gameCtx.strokeText(
-            "Raise both hands to start",
-            WIDTH / 2 - 150,
-            HEIGHT / 2 + 20
-          );
-          gameCtx.fillText(
-            "Raise both hands to start",
-            WIDTH / 2 - 150,
-            HEIGHT / 2 + 20
-          );
-          gameCtx.font = "18px Arial";
-          gameCtx.fillText(
-            "Open palm: Jump | Fist: Crouch",
-            WIDTH / 2 - 160,
-            HEIGHT / 2 + 60
-          );
+          gameCtx.lineWidth = 4;
+          gameCtx.font = "bold 72px Arial";
+          const titleX = gameCanvas.width / 2 - 320;
+          const titleY = gameCanvas.height / 2 - 80;
+          gameCtx.strokeText("SPACE COW RUNNER", titleX, titleY);
+          gameCtx.fillText("SPACE COW RUNNER", titleX, titleY);
+          gameCtx.font = "bold 36px Arial";
+          gameCtx.strokeText("Jump to start", gameCanvas.width / 2 - 120, titleY + 60);
+          gameCtx.fillText("Jump to start", gameCanvas.width / 2 - 120, titleY + 60);
+          gameCtx.font = "24px Arial";
+          gameCtx.fillText("Jump IRL to jump | Crouch IRL to crouch", gameCanvas.width / 2 - 240, titleY + 110);
         }
       }
 
@@ -671,6 +738,8 @@
         requestAnimationFrame(gameLoop);
       }
 
+      // Initialize player position
+      resetGame();
       gameLoop();
     </script>
   </body>
