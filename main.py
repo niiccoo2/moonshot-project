@@ -206,3 +206,4 @@ if __name__ == "__main__":
 
     print(f"Server running under:\nPC: http://127.0.0.1:{PORT}\nWLAN: http://{ip}:{PORT}/")
     socketio.run(app, host="0.0.0.0", port=7000)
+# update to aolder version for server
