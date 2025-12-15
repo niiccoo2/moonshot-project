@@ -360,23 +360,59 @@
 	function drawEnvironment() {
 		const GROUND = canvas.height * GROUND_RATIO;
 
-		// Sky gradient
-		const skyGradient = ctx.createLinearGradient(0, 0, 0, GROUND);
-		skyGradient.addColorStop(0, '#87CEEB');
-		skyGradient.addColorStop(1, '#B0E0E6');
-		ctx.fillStyle = skyGradient;
+		// ---- SPACE SKY ----
+		const spaceGradient = ctx.createLinearGradient(0, 0, 0, GROUND);
+		spaceGradient.addColorStop(0, '#050012');
+		spaceGradient.addColorStop(0.6, '#12002a');
+		spaceGradient.addColorStop(1, '#1a0033');
+
+		ctx.fillStyle = spaceGradient;
 		ctx.fillRect(0, 0, canvas.width, GROUND);
 
-		// Ground gradient
-		const groundGradient = ctx.createLinearGradient(0, GROUND, 0, canvas.height);
-		groundGradient.addColorStop(0, '#90EE90');
-		groundGradient.addColorStop(1, '#32CD32');
-		ctx.fillStyle = groundGradient;
+		// Stars
+		ctx.fillStyle = 'white';
+		for (let i = 0; i < 150; i++) {
+			const x = Math.random() * canvas.width;
+			const y = Math.random() * GROUND;
+			const r = Math.random() * 2;
+			ctx.beginPath();
+			ctx.arc(x, y, r, 0, Math.PI * 2);
+			ctx.fill();
+		}
+
+		// ---- MOON SURFACE ----
+		ctx.fillStyle = '#bdbdbd';
 		ctx.fillRect(0, GROUND, canvas.width, canvas.height - GROUND);
 
-		// Ground line
-		ctx.strokeStyle = '#228B22';
-		ctx.lineWidth = 5;
+		// Shading gradient
+		const moonShade = ctx.createLinearGradient(0, GROUND, 0, canvas.height);
+		moonShade.addColorStop(0, 'rgba(255,255,255,0.2)');
+		moonShade.addColorStop(1, 'rgba(0,0,0,0.3)');
+		ctx.fillStyle = moonShade;
+		ctx.fillRect(0, GROUND, canvas.width, canvas.height - GROUND);
+
+		// Craters
+		for (let i = 0; i < 12; i++) {
+			const cx = Math.random() * canvas.width;
+			const cy = GROUND + Math.random() * (canvas.height - GROUND);
+			const radius = 20 + Math.random() * 40;
+
+			ctx.fillStyle = '#a9a9a9';
+			ctx.beginPath();
+			ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+			ctx.fill();
+
+			// Inner shadow
+			ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+			ctx.lineWidth = 4;
+			ctx.beginPath();
+			ctx.arc(cx - radius * 0.2, cy - radius * 0.2, radius * 0.8, 0, Math.PI * 2);
+			ctx.stroke();
+		}
+
+		// Horizon line
+		ctx.strokeStyle = '#888';
+		ctx.lineWidth = 4;
 		ctx.beginPath();
 		ctx.moveTo(0, GROUND);
 		ctx.lineTo(canvas.width, GROUND);
@@ -389,10 +425,15 @@
 		const body = lastBodyData.body;
 		const scale = canvas.width;
 
-		function drawPoint(x: number | null, y: number | null, label: string, color = '#FF0000') {
+		function drawPoint(
+			x: number | null,
+			y: number | null,
+			label: string,
+			color: string = '#FF0000'
+		) {
 			if (x === null || y === null) return;
 
-			const px = x * scale;
+			const px = (1 - x) * scale;
 			const py = y * canvas.height;
 
 			ctx.fillStyle = color;
@@ -408,42 +449,29 @@
 			ctx.fillText(label, px + 15, py + 5);
 		}
 
-		// Draw all keypoints
-		if (body.head) drawPoint(body.head.x, body.head.y, 'HEAD', '#FF00FF');
-		if (body.left_shoulder)
-			drawPoint(body.left_shoulder.x, body.left_shoulder.y, 'L_SHOULDER', '#00FF00');
-		if (body.right_shoulder)
-			drawPoint(body.right_shoulder.x, body.right_shoulder.y, 'R_SHOULDER', '#00FF00');
-		if (body.left_elbow) drawPoint(body.left_elbow.x, body.left_elbow.y, 'L_ELBOW', '#0000FF');
-		if (body.right_elbow) drawPoint(body.right_elbow.x, body.right_elbow.y, 'R_ELBOW', '#0000FF');
+		drawPoint(body.head.x, body.head.y, 'HEAD', '#FF00FF');
+		drawPoint(body.left_shoulder.x, body.left_shoulder.y, 'L_SHOULDER', '#00FF00');
+		drawPoint(body.right_shoulder.x, body.right_shoulder.y, 'R_SHOULDER', '#00FF00');
+		drawPoint(body.left_elbow.x, body.left_elbow.y, 'L_ELBOW', '#0000FF');
+		drawPoint(body.right_elbow.x, body.right_elbow.y, 'R_ELBOW', '#0000FF');
 
-		// Draw skeleton lines
-		if (body.left_shoulder && body.right_shoulder) {
-			ctx.strokeStyle = '#FFFF00';
-			ctx.lineWidth = 3;
+		ctx.strokeStyle = '#FFFF00';
+		ctx.lineWidth = 3;
 
-			// Shoulders line
-			ctx.beginPath();
-			ctx.moveTo(body.left_shoulder.x * scale, body.left_shoulder.y * canvas.height);
-			ctx.lineTo(body.right_shoulder.x * scale, body.right_shoulder.y * canvas.height);
-			ctx.stroke();
+		ctx.beginPath();
+		ctx.moveTo((1 - body.left_shoulder.x) * scale, body.left_shoulder.y * canvas.height);
+		ctx.lineTo((1 - body.right_shoulder.x) * scale, body.right_shoulder.y * canvas.height);
+		ctx.stroke();
 
-			// Left arm
-			if (body.left_elbow) {
-				ctx.beginPath();
-				ctx.moveTo(body.left_shoulder.x * scale, body.left_shoulder.y * canvas.height);
-				ctx.lineTo(body.left_elbow.x * scale, body.left_elbow.y * canvas.height);
-				ctx.stroke();
-			}
+		ctx.beginPath();
+		ctx.moveTo((1 - body.left_shoulder.x) * scale, body.left_shoulder.y * canvas.height);
+		ctx.lineTo((1 - body.left_elbow.x) * scale, body.left_elbow.y * canvas.height);
+		ctx.stroke();
 
-			// Right arm
-			if (body.right_elbow) {
-				ctx.beginPath();
-				ctx.moveTo(body.right_shoulder.x * scale, body.right_shoulder.y * canvas.height);
-				ctx.lineTo(body.right_elbow.x * scale, body.right_elbow.y * canvas.height);
-				ctx.stroke();
-			}
-		}
+		ctx.beginPath();
+		ctx.moveTo((1 - body.right_shoulder.x) * scale, body.right_shoulder.y * canvas.height);
+		ctx.lineTo((1 - body.right_elbow.x) * scale, body.right_elbow.y * canvas.height);
+		ctx.stroke();
 	}
 
 	function drawDebugInfo() {
@@ -485,7 +513,7 @@
 
 	function jump() {
 		if (game.player.grounded && !game.player.crouching) {
-			game.player.velocityY = -20;
+			game.player.velocityY = -28;
 			game.player.grounded = false;
 			playJump();
 		}
@@ -554,7 +582,7 @@
 
 			// Spawn obstacles
 			game.obstacleTimer++;
-			if (game.obstacleTimer > 200 / game.speed) {
+			if (game.obstacleTimer > 800 / game.speed) {
 				spawnObstacle();
 				game.obstacleTimer = 0;
 			}
