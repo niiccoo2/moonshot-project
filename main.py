@@ -8,6 +8,7 @@ from tf.recognision import main
 import uuid
 import qrcode as qr
 import os as os
+import time
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -135,7 +136,7 @@ def handle_frame(blob):
     app.last_frame = frame
 
     result = main(frame)
-    payload = {"session_id": session_id, "result": result}
+    payload = {"session_id": session_id, "result": result, "timestamp": int(time.time() * 1000)}
     if target_room:
         emit("result", payload, room=target_room)
     else:
