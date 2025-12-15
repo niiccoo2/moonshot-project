@@ -77,7 +77,7 @@
 
 		socket = io(window.location.origin, {
 			path: '/socket.io',
-			transports: ['websocket', 'polling']
+			transports: ['polling'] // Use polling only for Cloudflare compatibility
 		});
 
 		socket.on('connect', () => {
