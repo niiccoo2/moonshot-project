@@ -11,6 +11,8 @@
 	let stars: { x: number; y: number; r: number }[] = [];
 	let craters: { cx: number; cy: number; radius: number }[] = [];
 	let environmentGenerated = false;
+	// Interval handle for continuous meteor spawning
+	let meteorInterval: ReturnType<typeof setInterval> | null = null;
 
 	const GROUND_RATIO = 0.75;
 
@@ -163,27 +165,55 @@
 		startMeteorShower();
 	}
 
-	function startMeteorShower() {
+	function startMeteorShower(forever = true) {
+		// Ensure no duplicate intervals
+		if (meteorInterval) {
+			clearInterval(meteorInterval);
+			meteorInterval = null;
+		}
+
 		game.state = 'meteor';
 		game.meteors = [];
-		for (let i = 0; i < 20; i++) {
-			setTimeout(() => {
-				game.meteors.push({
-					x: Math.random() * canvas.width,
-					y: -50,
-					size: 50 + Math.random() * 40,
-					speedY: 4 + Math.random() * 5,
-					speedX: (Math.random() - 0.5) * 3
-				});
-			}, i * 200);
+
+		// Spawn one immediately and then continuously
+		meteorInterval = setInterval(() => {
+			// push one meteor per interval
+			game.meteors.push({
+				x: Math.random() * canvas.width,
+				y: -50,
+				size: 50 + Math.random() * 40,
+				speedY: 4 + Math.random() * 5,
+				speedX: (Math.random() - 0.5) * 3
+			});
+
+			// Keep meteor array bounded to avoid memory growth
+			if (game.meteors.length > 400) {
+				game.meteors.splice(0, game.meteors.length - 400);
+			}
+		}, 200);
+
+		// If caller requested a short shower, stop after 5s
+		if (!forever) {
+			setTimeout(() => stopMeteorShower(), 5000);
 		}
-		setTimeout(() => {
+	}
+
+	function stopMeteorShower() {
+		if (meteorInterval) {
+			clearInterval(meteorInterval);
+			meteorInterval = null;
+		}
+		// clear meteors and return to playing state if appropriate
+		game.meteors = [];
+		if (game.state === 'meteor') {
 			game.state = 'playing';
-			game.meteors = [];
-		}, 5000);
+		}
 	}
 
 	function gameOver() {
+		// ensure meteor interval is stopped
+		stopMeteorShower();
+
 		game.state = 'gameOver';
 		playDeath();
 		onGameOver(game.score, game.level);
@@ -713,6 +743,7 @@ function drawUI() {
 			document.removeEventListener('keyup', handleKeyup);
 			cancelAnimationFrame(animationFrame);
 			clearInterval(inputInterval);
++			stopMeteorShower();
 		}
 	});
 </script>
