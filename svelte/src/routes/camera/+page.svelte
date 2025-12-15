@@ -10,22 +10,64 @@
 	let ctx: CanvasRenderingContext2D;
 	let socket: any;
 	let streaming = false;
+	let connectionStatus = 'Connecting...';
+	let connectionColor = 'yellow';
+	let debugLog: string[] = [];
+
+	function log(msg: string) {
+		const timestamp = new Date().toLocaleTimeString();
+		const logMsg = `[${timestamp}] ${msg}`;
+		console.log(logMsg);
+		debugLog = [logMsg, ...debugLog].slice(0, 10);
+	}
 
 	onMount(async () => {
-		console.log('Connecting to:', window.location.origin);
+		const origin = window.location.origin;
+		log(`Page loaded, origin: ${origin}`);
+		log(`Session: ${session_id}, Camera: ${cameraId}`);
 
-		socket = io(window.location.origin, {
+		// Test health endpoint
+		try {
+			const healthRes = await fetch(`${origin}/api/health`);
+			const health = await healthRes.json();
+			log(`Health check: ${JSON.stringify(health)}`);
+		} catch (e: any) {
+			log(`Health check failed: ${e.message}`);
+		}
+
+		log('Creating Socket.IO connection...');
+		socket = io(origin, {
 			path: '/socket.io',
-			transports: ['polling'] // Use polling only for Cloudflare compatibility
+			transports: ['polling'],
+			reconnection: true,
+			reconnectionDelay: 1000,
+			timeout: 10000
 		});
 
 		socket.on('connect', () => {
-			console.log('Connected to server as camera:', cameraId);
+			log(`✓ Connected! Socket ID: ${socket.id}`);
+			connectionStatus = 'Connected ✓';
+			connectionColor = 'lime';
 			socket.emit('join_session', { session_id, role: 'camera', cameraId });
+			log('Sent join_session event');
 		});
 
 		socket.on('connect_error', (error: any) => {
-			console.error('Socket connection error:', error);
+			log(`✗ Connection error: ${error.message}`);
+			connectionStatus = `Error: ${error.message}`;
+			connectionColor = 'red';
+		});
+
+		socket.on('disconnect', (reason: string) => {
+			log(`✗ Disconnected: ${reason}`);
+			connectionStatus = `Disconnected: ${reason}`;
+			connectionColor = 'orange';
+		});
+
+		socket.on('reconnect_attempt', () => {
+			log('Attempting to reconnect...');
+			connectionStatus = 'Reconnecting...';
+			connectionColor = 'yellow';
 		});
 
 		canvas = document.createElement('canvas');
@@ -61,8 +103,16 @@
 	<h1>📹 Camera Connected</h1>
 	<p class="session-id">Session: <strong>{session_id}</strong></p>
 	<p class="camera-id">Camera ID: <strong>{cameraId}</strong></p>
+	<p class="connection" style="color: {connectionColor}; font-weight: bold;">{connectionStatus}</p>
 	<video bind:this={video} autoplay playsinline muted class="preview"></video>
 	<p class="status">{streaming ? '🟢 Streaming' : '⚪ Waiting...'}</p>
+
+	<div class="debug-log">
+		<strong>Debug Log:</strong>
+		{#each debugLog as log}
+			<div class="log-entry">{log}</div>
+		{/each}
+	</div>
 </div>
 
 <style>
@@ -96,8 +146,29 @@
 		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 		transform: scaleX(-1);
 	}
+	.connection {
+		font-size: 18px;
+		margin: 10px 0;
+	}
 	.status {
 		font-size: 28px;
+	}
+	.debug-log {
+		margin-top: 20px;
+		background: rgba(0, 0, 0, 0.3);
+		padding: 15px;
+		border-radius: 8px;
+		width: 90%;
+		max-width: 600px;
+		max-height: 300px;
+		overflow-y: auto;
+		text-align: left;
+		font-size: 12px;
+		font-family: 'Courier New', monospace;
+	}
+	.log-entry {
+		margin: 4px 0;
+		opacity: 0.9;
 		margin: 10px 0;
 		font-weight: bold;
 	}

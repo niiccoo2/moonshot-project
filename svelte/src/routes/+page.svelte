@@ -29,11 +29,21 @@
 		crouching: false,
 		shoulderY: 0,
 		remoteCameras: 0,
-		fps: 0
+		fps: 0,
+		connectionStatus: 'Not connected',
+		connectionColor: 'gray'
 	};
 
 	let lastFrameTime = 0;
 	let frameCount = 0;
+	let debugLog: string[] = [];
+
+	function log(msg: string) {
+		const timestamp = new Date().toLocaleTimeString();
+		const logMsg = `[${timestamp}] ${msg}`;
+		console.log(logMsg);
+		debugLog = [logMsg, ...debugLog].slice(0, 15);
+	}
 
 	function processResults(poseLandmarkerResult: any) {
 		if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
@@ -72,21 +82,50 @@
 	}
 
 	function setupRemoteCameras() {
-		console.log('Setting up remote cameras, session:', session_id);
-		console.log('Connecting to:', window.location.origin);
+		const origin = window.location.origin;
+		log(`Setting up remote cameras`);
+		log(`Session: ${session_id}`);
+		log(`Origin: ${origin}`);
 
-		socket = io(window.location.origin, {
+		// Test health endpoint
+		fetch(`${origin}/api/health`)
+			.then((res) => res.json())
+			.then((health) => log(`Health check: ${JSON.stringify(health)}`))
+			.catch((e) => log(`Health check failed: ${e.message}`));
+
+		log('Creating Socket.IO connection...');
+		socket = io(origin, {
 			path: '/socket.io',
-			transports: ['polling'] // Use polling only for Cloudflare compatibility
+			transports: ['polling'],
+			reconnection: true,
+			reconnectionDelay: 1000,
+			timeout: 10000
 		});
 
 		socket.on('connect', () => {
-			console.log('Game connected to server');
+			log(`✓ Game connected! Socket ID: ${socket.id}`);
+			debugInfo.connectionStatus = 'Connected ✓';
+			debugInfo.connectionColor = 'lime';
 			socket.emit('join_session', { session_id, role: 'game' });
+			log('Sent join_session as game');
 		});
 
 		socket.on('connect_error', (error: any) => {
-			console.error('Socket connection error:', error);
+			log(`✗ Connection error: ${error.message}`);
+			debugInfo.connectionStatus = `Error: ${error.message}`;
+			debugInfo.connectionColor = 'red';
+		});
+
+		socket.on('disconnect', (reason: string) => {
+			log(`✗ Disconnected: ${reason}`);
+			debugInfo.connectionStatus = `Disconnected: ${reason}`;
+			debugInfo.connectionColor = 'orange';
+		});
+
+		socket.on('reconnect_attempt', () => {
+			log('Attempting to reconnect...');
+			debugInfo.connectionStatus = 'Reconnecting...';
+			debugInfo.connectionColor = 'yellow';
 		});
 
 		socket.on('frame', (data: { cameraId: string; blob: Blob }) => {
@@ -216,7 +255,20 @@
 			<p>Jumping: {debugInfo.jumping ? '✅' : '❌'}</p>
 			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
 			<p>Remote Cameras: {debugInfo.remoteCameras}</p>
+			{#if useRemoteCameras}
+				<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
+			{/if}
 		</div>
+
+		<!-- Debug log -->
+		{#if debugLog.length > 0}
+			<div class="debug-log">
+				<strong>🔍 Connection Log:</strong>
+				{#each debugLog as log}
+					<div class="log-entry">{log}</div>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -276,6 +328,36 @@
 	.debug-overlay p {
 		margin: 4px 0;
 		line-height: 1.5;
+	}
+
+	.debug-log {
+		position: absolute;
+		bottom: 16px;
+		right: 16px;
+		padding: 12px;
+		background: rgba(0, 0, 0, 0.9);
+		color: #0ff;
+		border: 2px solid #0ff;
+		border-radius: 8px;
+		font-family: 'Courier New', monospace;
+		font-size: 11px;
+		z-index: 100;
+		max-width: 400px;
+		max-height: 400px;
+		overflow-y: auto;
+		pointer-events: none;
+	}
+
+	.debug-log strong {
+		display: block;
+		margin-bottom: 8px;
+		color: #ff0;
+	}
+
+	.log-entry {
+		margin: 3px 0;
+		opacity: 0.9;
+		word-break: break-all;
 	}
 
 	#game-root {

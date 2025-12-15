@@ -17,10 +17,17 @@ const io = new Server(server, {
 const sessions = new Map();
 
 io.on('connection', (socket) => {
-	console.log('Client connected:', socket.id);
+	console.log('='.repeat(40));
+	console.log('NEW SOCKET.IO CONNECTION');
+	console.log('Socket ID:', socket.id);
+	console.log('Time:', new Date().toISOString());
+	console.log('Transport:', socket.conn.transport.name);
+	console.log('='.repeat(40));
 
 	socket.on('join_session', ({ session_id, role, cameraId }) => {
-		console.log(`${socket.id} joining ${session_id} as ${role}`, cameraId || '');
+		console.log(
+			`[JOIN] ${socket.id} -> session: ${session_id}, role: ${role}${cameraId ? `, camera: ${cameraId}` : ''}`
+		);
 		socket.join(session_id);
 
 		if (!sessions.has(session_id)) {
@@ -64,11 +71,44 @@ io.on('connection', (socket) => {
 	});
 });
 
+// Health check endpoint BEFORE SvelteKit handler
+app.get('/api/health', (req, res) => {
+	console.log('Health check hit');
+	res.json({
+		status: 'ok',
+		socketio: 'running',
+		sessions: sessions.size,
+		time: new Date().toISOString()
+	});
+});
+
+// Socket.IO status endpoint
+app.get('/api/socketio-status', (req, res) => {
+	console.log('Socket.IO status check hit');
+	const sessionDetails = [];
+	for (const [id, session] of sessions.entries()) {
+		sessionDetails.push({
+			id,
+			cameras: session.cameras.size,
+			hasGame: !!session.game
+		});
+	}
+	res.json({
+		status: 'running',
+		sessions: sessionDetails
+	});
+});
+
 // Use SvelteKit handler for all routes
 app.use(handler);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-	console.log(`Server running on port ${PORT}`);
-	console.log(`Socket.IO server is ready`);
+	console.log('='.repeat(60));
+	console.log('SERVER STARTED');
+	console.log(`Time: ${new Date().toISOString()}`);
+	console.log(`Port: ${PORT}`);
+	console.log(`Socket.IO: ENABLED`);
+	console.log(`Health check: http://localhost:${PORT}/api/health`);
+	console.log('='.repeat(60));
 });

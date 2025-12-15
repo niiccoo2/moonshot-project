@@ -35,3 +35,4 @@ qr_code
 
 # svelte
 .svelte-kit
+/svelte/build
