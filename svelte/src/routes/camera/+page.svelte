@@ -86,9 +86,11 @@
 			if (streaming && ctx) {
 				ctx.drawImage(video, 0, 0, 320, 240);
 				canvas.toBlob(
-					(blob) => {
+					async (blob) => {
 						if (blob && socket.connected) {
-							socket.emit('frame', { cameraId, blob });
+							// Convert Blob to ArrayBuffer for Socket.IO transmission
+							const arrayBuffer = await blob.arrayBuffer();
+							socket.emit('frame', { cameraId, blob: arrayBuffer });
 						}
 					},
 					'image/jpeg',

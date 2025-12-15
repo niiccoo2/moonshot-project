@@ -8,6 +8,7 @@
 	let session_id = $page.url.searchParams.get('session') || crypto.randomUUID();
 	let video: HTMLVideoElement;
 	let remoteCameras: Map<string, HTMLImageElement> = new Map();
+	let cameraDisplayUrls: Map<string, string> = new Map(); // Track URLs for display
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
@@ -130,9 +131,8 @@
 			debugInfo.connectionColor = 'yellow';
 		});
 
-		socket.on('frame', (data: { cameraId: string; blob: Blob }) => {
+		socket.on('frame', (data: { cameraId: string; blob: any }) => {
 			const { cameraId, blob } = data;
-			log(`📸 Frame received from ${cameraId} (size: ${blob.size} bytes)`);
 
 			if (!remoteCameras.has(cameraId)) {
 				log(`✓ New camera connected: ${cameraId}`);
@@ -148,13 +148,21 @@
 
 			// Only process frames from selected camera
 			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
-				log(`⏭️ Skipping frame from ${cameraId} (selected: ${selectedCamera})`);
 				return;
 			}
 
-			log(`✅ Processing frame from ${cameraId}`);
+			log(`✓ Processing frame from ${cameraId}`);
+
+			// Convert ArrayBuffer back to Blob
+			const blobData = new Blob([blob], { type: 'image/jpeg' });
 			const img = remoteCameras.get(cameraId)!;
-			const url = URL.createObjectURL(blob);
+			const url = URL.createObjectURL(blobData);
+
+			// Clean up old display URL
+			if (cameraDisplayUrls.has(cameraId)) {
+				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
+			}
+			cameraDisplayUrls.set(cameraId, url);
 
 			img.onload = () => {
 				const now = performance.now();
@@ -171,6 +179,11 @@
 		socket.on('camera_disconnected', (cameraId: string) => {
 			log(`✗ Camera disconnected: ${cameraId}`);
 			remoteCameras.delete(cameraId);
+			// Clean up display URL
+			if (cameraDisplayUrls.has(cameraId)) {
+				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
+				cameraDisplayUrls.delete(cameraId);
+			}
 			debugInfo.remoteCameras = remoteCameras.size;
 			cameraList = Array.from(remoteCameras.keys());
 			// Switch to local if selected camera disconnected
@@ -267,11 +280,11 @@
 			style="transform: scaleX(-1);"
 			class="video-overlay camera-preview"
 		></video>
-	{:else if selectedCamera !== 'local' && remoteCameras.has(selectedCamera)}
+	{:else if selectedCamera !== 'local' && cameraDisplayUrls.has(selectedCamera)}
 		<!-- Remote camera preview -->
 		<div class="video-overlay camera-preview remote-preview">
 			<img
-				src={remoteCameras.get(selectedCamera)?.src || ''}
+				src={cameraDisplayUrls.get(selectedCamera)}
 				alt="Remote camera"
 				style="transform: scaleX(-1); width: 100%; height: 100%; object-fit: cover;"
 			/>
