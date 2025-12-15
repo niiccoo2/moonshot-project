@@ -19,8 +19,9 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy built assets
+# Copy built assets and server
 COPY --from=builder /app/build ./build
+COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/package*.json ./
 
 # Install only production dependencies
@@ -29,8 +30,8 @@ RUN npm ci --omit=dev
 # Expose port
 EXPOSE 3000
 
-# Start the app
+# Start the app with custom server
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
-CMD ["node", "build"]
+CMD ["node", "server.js"]
