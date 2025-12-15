@@ -257,17 +257,10 @@
 		></video>
 	{/if}
 
-	<!-- Remote camera indicator -->
-	<div class="remote-indicator">
-		Session: {session_id}
-		<br />
-		Remote Cameras: {remoteCameras.size}
-	</div>
-
 	<!-- Camera Selector -->
 	{#if useLocalCamera && cameraList.length > 0}
 		<div class="camera-selector">
-			<strong>🎮 Active Camera:</strong>
+			<strong>Active Camera:</strong>
 			<select
 				bind:value={selectedCamera}
 				on:change={() => log(`Switched to camera: ${selectedCamera}`)}
@@ -280,16 +273,31 @@
 		</div>
 	{/if}
 
-	<!-- Debug info -->
-	{#if debug}
-		<div class="debug-overlay">
-			<h3>Debug Info</h3>
-			<p>Shoulder Y: {debugInfo.shoulderY.toFixed(2)}</p>
-			<p>Jumping: {debugInfo.jumping ? '✅' : '❌'}</p>
-			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
-			<p>Remote Cameras: {debugInfo.remoteCameras}</p>
-			<p>Active Camera: <strong>{selectedCamera}</strong></p>
-			<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
+	<!-- Bottom Left - Info Container -->
+	<div class="bottom-left-info">
+		<!-- Session Info -->
+		<div class="remote-indicator">
+			<strong>Session:</strong>
+			{session_id}
+			<br />
+			<strong>Remote Cameras:</strong>
+			{remoteCameras.size}
 		</div>
-	{/if}
+
+		<!-- Debug info -->
+		{#if debug}
+			<div class="debug-overlay">
+				<h3>Debug Info</h3>
+				<p><strong>Shoulder Y:</strong> {debugInfo.shoulderY.toFixed(2)}</p>
+				<p><strong>Jumping:</strong> {debugInfo.jumping ? '✅' : '❌'}</p>
+				<p><strong>Crouching:</strong> {debugInfo.crouching ? '✅' : '❌'}</p>
+				<p><strong>Remote Cameras:</strong> {debugInfo.remoteCameras}</p>
+				<p><strong>Active Camera:</strong> {selectedCamera}</p>
+				<p>
+					<strong>Socket:</strong>
+					<span style="color: {debugInfo.connectionColor}">{debugInfo.connectionStatus}</span>
+				</p>
+			</div>
+		{/if}
+	</div>
 </div>
