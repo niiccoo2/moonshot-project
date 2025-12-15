@@ -7,10 +7,9 @@
 	import '$lib/main.css';
 	import QRCode from '$lib/QR-Code.svelte';
 
-	let session_id = $page.url.searchParams.get('session') || randomLetters4();
+	let session_id = $page.url.searchParams.get('session1') || randomLetters4();
 	let video: HTMLVideoElement;
-	let remoteCameras: Map<string, HTMLImageElement> = new Map();
-	let cameraDisplayUrls: Map<string, string> = new Map(); // Track URLs for display
+	let remoteCameras: Map<string, boolean> = new Map(); // Changed to boolean as we don't store images anymore
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
@@ -52,6 +51,7 @@
 		if (debug) console.log(msg);
 	}
 
+	// Logic for LOCAL camera (MediaPipe running in this browser)
 	function processResults(poseLandmarkerResult: any) {
 		if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
 			const pose = poseLandmarkerResult.landmarks[0];
@@ -126,60 +126,57 @@
 			debugInfo.connectionColor = 'yellow';
 		});
 
-		socket.on('frame', (data: { cameraId: string; blob: any }) => {
-			const { cameraId, blob } = data;
+		// NEW: Listen for processed results instead of raw frames
+		socket.on('result', (data: { cameraId: string; result: any }) => {
+			const { cameraId, result } = data;
 
+			// Register new camera if not seen before
 			if (!remoteCameras.has(cameraId)) {
 				log(`✓ New camera connected: ${cameraId}`);
-				remoteCameras.set(cameraId, new Image());
+				remoteCameras.set(cameraId, true);
 				debugInfo.remoteCameras = remoteCameras.size;
 				cameraList = Array.from(remoteCameras.keys());
-				// Auto-select first remote camera if local camera is disabled
+				// Auto-select first remote camera if local camera is disabled or default
 				if (!useLocalCamera && selectedCamera === 'local' && cameraList.length === 1) {
 					selectedCamera = cameraId;
 					log(`Auto-selected camera: ${cameraId}`);
 				}
 			}
 
-			// Only process frames from selected camera
+			// Only process data from the selected camera
 			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
 				return;
 			}
 
-			log(`✓ Processing frame from ${cameraId}`);
+			// Map the received JSON data to game inputs
+			if (result && result.body) {
+				const shoulder = result.body.right_shoulder; // Using right shoulder as in local logic
 
-			// Convert ArrayBuffer back to Blob
-			const blobData = new Blob([blob], { type: 'image/jpeg' });
-			const img = remoteCameras.get(cameraId)!;
-			const url = URL.createObjectURL(blobData);
+				if (shoulder) {
+					debugInfo.shoulderY = shoulder.y;
 
-			// Clean up old display URL
-			if (cameraDisplayUrls.has(cameraId)) {
-				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
-			}
-			cameraDisplayUrls.set(cameraId, url);
+					// Same logic as processResults: < 0.33 jump, > 0.66 crouch
+					if (shoulder.y < 0.33) {
+						input.jumping = true;
+						input.crouching = false;
+					} else if (shoulder.y > 0.66) {
+						input.crouching = true;
+						input.jumping = false;
+					} else {
+						input.jumping = false;
+						input.crouching = false;
+					}
 
-			img.onload = () => {
-				const now = performance.now();
-				if (now - lastProcessTime > PROCESS_INTERVAL && poseLandmarker) {
-					// Use detectForVideo for both video and image sources
-					const result = poseLandmarker.detectForVideo(img, now);
-					processResults(result);
-					lastProcessTime = now;
+					// Update debug info
+					debugInfo.jumping = input.jumping;
+					debugInfo.crouching = input.crouching;
 				}
-				URL.revokeObjectURL(url);
-			};
-			img.src = url;
+			}
 		});
 
 		socket.on('camera_disconnected', (cameraId: string) => {
 			log(`✗ Camera disconnected: ${cameraId}`);
 			remoteCameras.delete(cameraId);
-			// Clean up display URL
-			if (cameraDisplayUrls.has(cameraId)) {
-				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
-				cameraDisplayUrls.delete(cameraId);
-			}
 			debugInfo.remoteCameras = remoteCameras.size;
 			cameraList = Array.from(remoteCameras.keys());
 			// Switch to local if selected camera disconnected
@@ -251,9 +248,8 @@
 <div id="game-root">
 	<Game {input} />
 
-	<!-- Camera preview - shows selected camera -->
+	<!-- Local camera preview (only visible if local is selected) -->
 	{#if selectedCamera === 'local' && useLocalCamera}
-		<!-- Local camera preview -->
 		<video
 			bind:this={video}
 			autoplay

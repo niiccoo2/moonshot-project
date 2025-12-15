@@ -4,11 +4,8 @@
 	import { io, type Socket } from 'socket.io-client';
 
 	let session_id_1 = '';
-	let session_id_2 = '';
 	let qrCodeUrl1 = '';
-	let qrCodeUrl2 = '';
 	let cameraUrl1 = '';
-	let cameraUrl2 = '';
 
 	let socket: Socket;
 
@@ -17,23 +14,15 @@
 	let p1Latency = -1;
 	let p1ResultText = 'Waiting for data …';
 
-	// Player 2 State
-	let p2Connected = false;
-	let p2Latency = -1;
-	let p2ResultText = 'Waiting for data …';
-
-	let globalStatus = 'Waiting for both cameras to connect…';
+	let globalStatus = 'Waiting for camera to connect…';
 	let allConnected = false;
 
 	onMount(() => {
 		session_id_1 = crypto.randomUUID().slice(0, 8);
-		session_id_2 = crypto.randomUUID().slice(0, 8);
 
 		cameraUrl1 = `${window.location.origin}/camera?session=${session_id_1}`;
-		cameraUrl2 = `${window.location.origin}/camera?session=${session_id_2}`;
 
 		qrCodeUrl1 = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(cameraUrl1)}`;
-		qrCodeUrl2 = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(cameraUrl2)}`;
 
 		socket = io();
 
@@ -41,7 +30,6 @@
 			console.log('Game connected to socket');
 			// Join sessions
 			socket.emit('join_session', { session_id: session_id_1, role: 'game' });
-			socket.emit('join_session', { session_id: session_id_2, role: 'game' });
 		});
 
 		socket.on('result', (payload: any) => {
@@ -56,21 +44,12 @@
 					p1Connected = true;
 					updateGlobalStatus();
 				}
-			} else if (session_id === session_id_2) {
-				p2ResultText = text;
-				p2Latency = latency;
-				if (!p2Connected) {
-					p2Connected = true;
-					updateGlobalStatus();
-				}
 			}
 		});
 
 		socket.on('disconnect', () => {
 			p1Connected = false;
-			p2Connected = false;
 			p1Latency = -1;
-			p2Latency = -1;
 			updateGlobalStatus();
 		});
 	});
@@ -80,16 +59,15 @@
 	});
 
 	function startGame() {
-		goto(`/?session1=${session_id_1}&session2=${session_id_2}&remote=true`);
+		goto(`/?session1=${session_id_1}&remote=true`);
 	}
 
 	function updateGlobalStatus() {
-		const missing = (p1Connected ? 0 : 1) + (p2Connected ? 0 : 1);
-		if (missing === 0) {
-			globalStatus = 'All cameras connected.';
+		if (p1Connected) {
+			globalStatus = 'Camera connected.';
 			allConnected = true;
 		} else {
-			globalStatus = `Waiting for ${missing} camera${missing === 1 ? '' : 's'} to connect…`;
+			globalStatus = 'Waiting for camera to connect…';
 			allConnected = false;
 		}
 	}
@@ -120,7 +98,7 @@
 
 <h1>Connect Camera</h1>
 <p>
-	Scan the QR code with each mobile device. Each stream stays on the phone and only the keypoint data
+	Scan the QR code with your mobile device. The stream stays on the phone and only the keypoint data
 	is forwarded to this control view.
 </p>
 <p id="connectionStatus" class="statusLabel" class:connected={allConnected} class:disconnected={!allConnected}>
@@ -142,21 +120,6 @@
 		<h2>Live Keypoints</h2>
 		<div class="resultBox">{p1ResultText}</div>
 	</article>
-
-<!--	&lt;!&ndash; Player 2 &ndash;&gt;-->
-<!--	<article class="playerCard light" data-session={session_id_2}>-->
-<!--		<p class="statusLabel" class:connected={p2Connected} class:disconnected={!p2Connected}>-->
-<!--			{p2Connected ? 'Connected' : 'Disconnected'}-->
-<!--		</p>-->
-<!--		<h2>Player 2</h2>-->
-<!--		<div>-->
-<!--			<img src={qrCodeUrl2} alt="QR Code 2" />-->
-<!--			<p><a href={cameraUrl2} target="_blank">Open camera 2 link</a></p>-->
-<!--			<p class="latencyLabel">Latency: {p2Latency >= 0 ? p2Latency + ' ms' : '&#45;&#45; ms'}</p>-->
-<!--		</div>-->
-<!--		<h2>Live Keypoints</h2>-->
-<!--		<div class="resultBox">{p2ResultText}</div>-->
-<!--	</article>-->
 </section>
 
 {#if allConnected}
@@ -195,11 +158,6 @@
 		gap: 0.75rem;
 		position: relative;
 		overflow: hidden;
-	}
-	.playerCard.light {
-		background: rgba(244, 244, 244, 0.9);
-		color: #111;
-		border-color: rgba(17, 17, 17, 0.2);
 	}
 	.playerCard::after {
 		content: "";
@@ -240,10 +198,6 @@
 		min-height: 140px;
 		border: 1px solid rgba(255, 255, 255, 0.15);
 	}
-	.playerCard.light .resultBox {
-		background: rgba(255, 255, 255, 0.6);
-		border-color: rgba(0, 0, 0, 0.2);
-	}
 	.statusLabel {
 		font-size: 0.9rem;
 		padding: 0.35rem 0.8rem;
@@ -253,10 +207,6 @@
 		background: rgba(255, 255, 255, 0.12);
 		color: #fff;
 		transition: background 0.2s, color 0.2s;
-	}
-	.playerCard.light .statusLabel {
-		color: #111;
-		background: rgba(17, 17, 17, 0.1);
 	}
 	.statusLabel.connected {
 		background: linear-gradient(135deg, #00c853, #b2ff59);
@@ -270,9 +220,6 @@
 		font-size: 0.85rem;
 		color: #9aceff;
 		margin-top: 0.25rem;
-	}
-	.playerCard.light .latencyLabel {
-		color: #0067a3;
 	}
 	#startGameBtn {
 		font-size: 1.1rem;
@@ -293,3 +240,12 @@
 		100% { transform: translateY(0); box-shadow: 0 10px 30px rgba(255, 75, 43, 0.35); }
 	}
 </style>
+
+<!--
+
+
+
+
+
+
+-->
