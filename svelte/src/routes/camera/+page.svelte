@@ -22,6 +22,10 @@
 	let poseLandmarker: PoseLandmarker;
 	let lastVideoTime = -1;
 
+	let availableCameras: MediaDeviceInfo[] = [];
+	let selectedCameraId: string = '';
+	let currentStream: MediaStream | null = null;
+
 	function log(msg: string) {
 		const timestamp = new Date().toLocaleTimeString();
 		const logMsg = `[${timestamp}] ${msg}`;
@@ -101,6 +105,46 @@
 			}
 		});
 		return lines.length ? lines.join(' | ') : 'No hands detected.';
+	}
+
+	async function enumerateCameras() {
+		try {
+			const devices = await navigator.mediaDevices.enumerateDevices();
+			availableCameras = devices.filter((device) => device.kind === 'videoinput');
+			log(`Found ${availableCameras.length} cameras`);
+			if (availableCameras.length > 0 && !selectedCameraId) {
+				selectedCameraId = availableCameras[0].deviceId;
+			}
+		} catch (e: any) {
+			log(`Failed to enumerate cameras: ${e.message}`);
+		}
+	}
+
+	async function startCamera(deviceId?: string) {
+		try {
+			// Stop existing stream
+			if (currentStream) {
+				currentStream.getTracks().forEach((track) => track.stop());
+			}
+
+			const constraints: MediaStreamConstraints = {
+				video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }
+			};
+
+			currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+			video.srcObject = currentStream;
+			await video.play();
+			streaming = true;
+			log(`Camera started: ${deviceId || 'default'}`);
+		} catch (e: any) {
+			log(`Failed to start camera: ${e.message}`);
+		}
+	}
+
+	async function switchCamera() {
+		if (selectedCameraId) {
+			await startCamera(selectedCameraId);
+		}
 	}
 
 	onMount(async () => {
@@ -187,10 +231,11 @@
 			overlayCtx = overlayCanvas.getContext('2d')!;
 		}
 
-		video.srcObject = await navigator.mediaDevices.getUserMedia({
-			video: { facingMode: 'user' } // Let browser decide resolution
-		});
-		await video.play();
+		// Enumerate cameras first
+		await enumerateCameras();
+
+		// Start camera with selected device
+		await startCamera(selectedCameraId || undefined);
 		streaming = true;
 
 		const processLoop = async () => {
@@ -290,6 +335,20 @@
 
 <div class="container">
 	<h2>Camera Streaming</h2>
+
+	{#if availableCameras.length > 1}
+		<div class="camera-picker">
+			<label for="cameraSelect">Select Camera:</label>
+			<select id="cameraSelect" bind:value={selectedCameraId} on:change={switchCamera}>
+				{#each availableCameras as camera}
+					<option value={camera.deviceId}>
+						{camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
+					</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
+
 	<div id="streamContainer">
 		<video bind:this={video} id="localVideo" autoplay muted playsinline></video>
 		<canvas bind:this={overlayCanvas} id="overlayCanvas"></canvas>
@@ -316,6 +375,31 @@
 
 	h2 {
 		margin: 0 0 1rem 0;
+	}
+
+	.camera-picker {
+		margin-bottom: 1rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.camera-picker label {
+		font-weight: 600;
+	}
+
+	.camera-picker select {
+		padding: 0.5rem 1rem;
+		font-size: 14px;
+		border-radius: 4px;
+		border: 2px solid #4caf50;
+		background: #fff;
+		color: #333;
+		cursor: pointer;
+	}
+
+	.camera-picker select:hover {
+		border-color: #66ff66;
 	}
 
 	#streamContainer {
