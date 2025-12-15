@@ -5,7 +5,7 @@
 	import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 	import { io } from 'socket.io-client';
 
-	let session_id = $page.url.searchParams.get('session') || crypto.randomUUID();
+	let session_id = $page.url.searchParams.get('session') || randomLetters4();
 	let video: HTMLVideoElement;
 	let remoteCameras: Map<string, HTMLImageElement> = new Map();
 	let cameraDisplayUrls: Map<string, string> = new Map(); // Track URLs for display
@@ -34,6 +34,16 @@
 		connectionStatus: 'Not connected',
 		connectionColor: 'gray'
 	};
+
+	function randomLetters4() {
+		const letters = 'abcdefghijklmnopqrstuvwxyz';
+		const result = new Array(4);
+		const bytes = crypto.getRandomValues(new Uint8Array(4)); // browser
+		for (let i = 0; i < 4; i++) {
+			result[i] = letters[bytes[i] % letters.length];
+		}
+		return result.join('');
+	}
 
 	function log(msg: string) {
 		if (debug) console.log(msg);
@@ -274,9 +284,9 @@
 
 	<!-- Remote camera indicator -->
 	<div class="remote-indicator">
-		📱 Session: {session_id}
+		Session: {session_id}
 		<br />
-		🎥 Remote Cameras: {remoteCameras.size}
+		Remote Cameras: {remoteCameras.size}
 	</div>
 
 	<!-- Camera Selector -->
