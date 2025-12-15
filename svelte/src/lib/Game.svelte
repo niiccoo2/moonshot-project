@@ -11,6 +11,9 @@
 	let cameraCtx: CanvasRenderingContext2D;
 	let cameraInterval: ReturnType<typeof setInterval>;
 	let inputInterval: ReturnType<typeof setInterval>;
+	let stars: { x: number; y: number; r: number }[] = [];
+	let craters: { cx: number; cy: number; radius: number }[] = [];
+	let environmentGenerated = false;
 
 	const GROUND_RATIO = 0.75;
 
@@ -357,6 +360,34 @@
 		ctx.fill();
 	}
 
+	function generateEnvironment() {
+		if (environmentGenerated) return;
+
+		const GROUND = canvas.height * GROUND_RATIO;
+
+		// Generate stars once
+		stars = [];
+		for (let i = 0; i < 150; i++) {
+			stars.push({
+				x: Math.random() * canvas.width,
+				y: Math.random() * GROUND,
+				r: Math.random() * 2
+			});
+		}
+
+		// Generate craters once
+		craters = [];
+		for (let i = 0; i < 12; i++) {
+			craters.push({
+				cx: Math.random() * canvas.width,
+				cy: GROUND + Math.random() * (canvas.height - GROUND),
+				radius: 20 + Math.random() * 40
+			});
+		}
+
+		environmentGenerated = true;
+	}
+
 	function drawEnvironment() {
 		const GROUND = canvas.height * GROUND_RATIO;
 
@@ -369,16 +400,13 @@
 		ctx.fillStyle = spaceGradient;
 		ctx.fillRect(0, 0, canvas.width, GROUND);
 
-		// Stars
+		// Draw pre-generated stars
 		ctx.fillStyle = 'white';
-		for (let i = 0; i < 150; i++) {
-			const x = Math.random() * canvas.width;
-			const y = Math.random() * GROUND;
-			const r = Math.random() * 2;
+		stars.forEach((star) => {
 			ctx.beginPath();
-			ctx.arc(x, y, r, 0, Math.PI * 2);
+			ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
 			ctx.fill();
-		}
+		});
 
 		// ---- MOON SURFACE ----
 		ctx.fillStyle = '#bdbdbd';
@@ -391,24 +419,26 @@
 		ctx.fillStyle = moonShade;
 		ctx.fillRect(0, GROUND, canvas.width, canvas.height - GROUND);
 
-		// Craters
-		for (let i = 0; i < 12; i++) {
-			const cx = Math.random() * canvas.width;
-			const cy = GROUND + Math.random() * (canvas.height - GROUND);
-			const radius = 20 + Math.random() * 40;
-
+		// Draw pre-generated craters
+		craters.forEach((crater) => {
 			ctx.fillStyle = '#a9a9a9';
 			ctx.beginPath();
-			ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+			ctx.arc(crater.cx, crater.cy, crater.radius, 0, Math.PI * 2);
 			ctx.fill();
 
 			// Inner shadow
 			ctx.strokeStyle = 'rgba(0,0,0,0.3)';
 			ctx.lineWidth = 4;
 			ctx.beginPath();
-			ctx.arc(cx - radius * 0.2, cy - radius * 0.2, radius * 0.8, 0, Math.PI * 2);
+			ctx.arc(
+				crater.cx - crater.radius * 0.2,
+				crater.cy - crater.radius * 0.2,
+				crater.radius * 0.8,
+				0,
+				Math.PI * 2
+			);
 			ctx.stroke();
-		}
+		});
 
 		// Horizon line
 		ctx.strokeStyle = '#888';
@@ -723,6 +753,7 @@
 	onMount(() => {
 		ctx = canvas.getContext('2d')!;
 		resizeCanvas();
+		generateEnvironment();
 		window.addEventListener('resize', resizeCanvas);
 
 		// Camera setup
