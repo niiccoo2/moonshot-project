@@ -192,6 +192,7 @@ p {
 
 /* Session Info */
 .remote-indicator {
+	font-family: Arial, Helvetica, sans-serif;
 	padding: 12px 16px;
 	background: rgba(0, 0, 0, 0.85);
 	color: white;
