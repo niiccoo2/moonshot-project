@@ -26,7 +26,7 @@
 		movingLeft: false
 	};
 
-	let debug = true;
+	let debug = false;
 	let debugInfo = {
 		jumping: false,
 		crouching: false,
