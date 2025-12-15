@@ -8,10 +8,9 @@
 	import QRCode from '$lib/QR-Code.svelte';
 
 	let showQRModal: boolean = false;
-	let session_id = $page.url.searchParams.get('session') || randomLetters4();
+	let session_id = $page.url.searchParams.get('session') || crypto.randomUUID().slice(0, 8);
 	let video: HTMLVideoElement;
-	let remoteCameras: Map<string, HTMLImageElement> = new Map();
-	let cameraDisplayUrls: Map<string, string> = new Map();
+	let remoteCameras: Map<string, boolean> = new Map();
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
@@ -38,7 +37,6 @@
 		connectionColor: 'gray'
 	};
 
-	// --- Leaderboard State (PRESERVED) ---
 	type LeaderboardEntry = {
 		id: number;
 		score: number;
@@ -227,12 +225,12 @@
 			debugInfo.connectionColor = 'yellow';
 		});
 
-		socket.on('frame', (data: { cameraId: string; blob: any }) => {
-			const { cameraId, blob } = data;
+		socket.on('result', (data: { cameraId: string; result: any }) => {
+			const { cameraId, result } = data;
 
 			if (!remoteCameras.has(cameraId)) {
 				log(`✓ New camera connected: ${cameraId}`);
-				remoteCameras.set(cameraId, new Image());
+				remoteCameras.set(cameraId, true);
 				debugInfo.remoteCameras = remoteCameras.size;
 				cameraList = Array.from(remoteCameras.keys());
 				// Auto-select first remote camera if local camera is disabled
@@ -242,45 +240,22 @@
 				}
 			}
 
-			// Only process frames from selected camera
+			// Only process results from selected camera
 			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
 				return;
 			}
 
-			log(`✓ Processing frame from ${cameraId}`);
+			log(`✓ Processing result from ${cameraId}`);
 
-			// Convert ArrayBuffer back to Blob
-			const blobData = new Blob([blob], { type: 'image/jpeg' });
-			const img = remoteCameras.get(cameraId)!;
-			const url = URL.createObjectURL(blobData);
-
-			// Clean up old display URL
-			if (cameraDisplayUrls.has(cameraId)) {
-				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
+			// Process the pose landmarks directly
+			if (result.body && result.body.length > 0) {
+				processResults({ landmarks: [result.body] });
 			}
-			cameraDisplayUrls.set(cameraId, url);
-
-			img.onload = () => {
-				const now = performance.now();
-				if (now - lastProcessTime > PROCESS_INTERVAL && poseLandmarker) {
-					// Use detectForVideo for both video and image sources
-					const result = poseLandmarker.detectForVideo(img, now);
-					processResults(result);
-					lastProcessTime = now;
-				}
-				URL.revokeObjectURL(url);
-			};
-			img.src = url;
 		});
 
 		socket.on('camera_disconnected', (cameraId: string) => {
 			log(`✗ Camera disconnected: ${cameraId}`);
 			remoteCameras.delete(cameraId);
-			// Clean up display URL
-			if (cameraDisplayUrls.has(cameraId)) {
-				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
-				cameraDisplayUrls.delete(cameraId);
-			}
 			debugInfo.remoteCameras = remoteCameras.size;
 			cameraList = Array.from(remoteCameras.keys());
 			// Switch to local if selected camera disconnected
@@ -422,21 +397,23 @@
 	{/if}
 
 	<div class="bottom-left-info">
-		<div class="session-content">
-			<div class="session-left">
-				<strong>Session:</strong>
+		<div class="remote-indicator">
+			<div class="session-content">
+				<div class="session-left">
+					<strong>Session:</strong>
 
-				{session_id}
+					{session_id}
 
-				<br />
+					<br />
 
-				<strong>Remote Cameras:</strong>
+					<strong>Remote Cameras:</strong>
 
-				{remoteCameras.size}
-			</div>
+					{remoteCameras.size}
+				</div>
 
-			<div class="session-right">
-				<button class="connect-btn" onclick={() => (showQRModal = true)}> Connect Camera </button>
+				<div class="session-right">
+					<button class="connect-btn" onclick={() => (showQRModal = true)}> Connect Camera </button>
+				</div>
 			</div>
 		</div>
 
@@ -490,13 +467,13 @@
 		z-index: 5;
 	}
 
-	/* .remote-indicator { */
-	/* background: rgba(0, 0, 0, 0.7); */
-	/* color: white; */
-	/* padding: 10px; */
-	/* border-radius: 5px; */
-	/* font-size: 14px; */
-	/* } */
+	.remote-indicator {
+		background: rgba(0, 0, 0, 0.7);
+		color: white;
+		padding: 10px;
+		border-radius: 5px;
+		font-size: 14px;
+	}
 
 	.debug-overlay {
 		background: rgba(0, 0, 0, 0.85);
