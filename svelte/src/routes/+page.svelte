@@ -132,6 +132,7 @@
 
 		socket.on('frame', (data: { cameraId: string; blob: Blob }) => {
 			const { cameraId, blob } = data;
+			log(`📸 Frame received from ${cameraId} (size: ${blob.size} bytes)`);
 
 			if (!remoteCameras.has(cameraId)) {
 				log(`✓ New camera connected: ${cameraId}`);
@@ -147,9 +148,11 @@
 
 			// Only process frames from selected camera
 			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
+				log(`⏭️ Skipping frame from ${cameraId} (selected: ${selectedCamera})`);
 				return;
 			}
 
+			log(`✅ Processing frame from ${cameraId}`);
 			const img = remoteCameras.get(cameraId)!;
 			const url = URL.createObjectURL(blob);
 
@@ -299,6 +302,7 @@
 			<p>Jumping: {debugInfo.jumping ? '✅' : '❌'}</p>
 			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
 			<p>Remote Cameras: {debugInfo.remoteCameras}</p>
+			<p>Active Camera: <strong>{selectedCamera}</strong></p>
 			{#if useRemoteCameras}
 				<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
 			{/if}
