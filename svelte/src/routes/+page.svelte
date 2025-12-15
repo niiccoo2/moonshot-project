@@ -167,7 +167,8 @@
 			img.onload = () => {
 				const now = performance.now();
 				if (now - lastProcessTime > PROCESS_INTERVAL && poseLandmarker) {
-					const result = poseLandmarker.detect(img);
+					// Use detectForVideo for both video and image sources
+					const result = poseLandmarker.detectForVideo(img, now);
 					processResults(result);
 					lastProcessTime = now;
 				}
