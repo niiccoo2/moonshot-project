@@ -31,7 +31,6 @@
 		crouching: false,
 		shoulderY: 0,
 		remoteCameras: 0,
-		fps: 0,
 		connectionStatus: 'Not connected',
 		connectionColor: 'gray'
 	};
@@ -71,15 +70,6 @@
 			debugInfo.jumping = input.jumping;
 			debugInfo.crouching = input.crouching;
 			debugInfo.remoteCameras = remoteCameras.size;
-
-			// Calculate FPS
-			const now = performance.now();
-			if (now - lastFrameTime > 1000) {
-				debugInfo.fps = frameCount;
-				frameCount = 0;
-				lastFrameTime = now;
-			}
-			frameCount++;
 		}
 	}
 
@@ -315,8 +305,7 @@
 	<!-- Debug info -->
 	{#if debug}
 		<div class="debug-overlay">
-			<h3>🐛 Debug Info</h3>
-			<p>FPS: {debugInfo.fps}</p>
+			<h3>Debug Info</h3>
 			<p>Shoulder Y: {debugInfo.shoulderY.toFixed(2)}</p>
 			<p>Jumping: {debugInfo.jumping ? '✅' : '❌'}</p>
 			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
