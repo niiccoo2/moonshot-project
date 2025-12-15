@@ -159,10 +159,10 @@
 			//
 
 			// Pose-to-Input Logic
-			if (pose[12] && pose[12].y < 0.33) {
+			if (pose[12] && pose[12].y < 0.4) {
 				input.jumping = true;
 				input.crouching = false;
-			} else if (pose[12] && pose[12].y > 0.66) {
+			} else if (pose[12] && pose[12].y > 0.6) {
 				input.crouching = true;
 				input.jumping = false;
 			} else {
