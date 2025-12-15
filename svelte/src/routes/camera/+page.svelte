@@ -109,9 +109,18 @@
 
 	async function enumerateCameras() {
 		try {
+			// Request permission first to get camera labels
+			const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+			tempStream.getTracks().forEach((track) => track.stop());
+
+			// Now enumerate with labels available
 			const devices = await navigator.mediaDevices.enumerateDevices();
 			availableCameras = devices.filter((device) => device.kind === 'videoinput');
 			log(`Found ${availableCameras.length} cameras`);
+			availableCameras.forEach((cam, i) => {
+				log(`Camera ${i}: ${cam.label || cam.deviceId}`);
+			});
+
 			if (availableCameras.length > 0 && !selectedCameraId) {
 				selectedCameraId = availableCameras[0].deviceId;
 			}
@@ -336,13 +345,13 @@
 <div class="container">
 	<h2>Camera Streaming</h2>
 
-	{#if availableCameras.length > 1}
+	{#if availableCameras.length > 0}
 		<div class="camera-picker">
 			<label for="cameraSelect">Select Camera:</label>
 			<select id="cameraSelect" bind:value={selectedCameraId} on:change={switchCamera}>
-				{#each availableCameras as camera}
+				{#each availableCameras as camera, i}
 					<option value={camera.deviceId}>
-						{camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
+						{camera.label || `Camera ${i + 1}`}
 					</option>
 				{/each}
 			</select>
