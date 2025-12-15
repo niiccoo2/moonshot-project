@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+
+	// 1. Initialize Dispatcher
+	const dispatch = createEventDispatcher();
 
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D;
@@ -430,8 +433,6 @@
 		ctx.stroke();
 	}
 
-	// File: Game.svelte
-
 function drawUI() {
 	// 1. Draw Level, Score, Speed (Existing: Top Left)
 	ctx.fillStyle = '#000';
@@ -500,6 +501,10 @@ function drawUI() {
 			} else {
 				countdownText = 'GO!';
 				speak('GO');
+                
+                // 2. DISPATCH EVENT HERE
+                dispatch('gameStart'); 
+
 				setTimeout(() => {
 					showCountdown = false;
 					game.state = 'playing';

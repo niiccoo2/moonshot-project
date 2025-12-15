@@ -1,15 +1,17 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import Game from '$lib/Game.svelte';
 	import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 	import { io } from 'socket.io-client';
 	import '$lib/main.css';
 
-	let session_id = $page.url.searchParams.get('session') || randomLetters4();
+	let session_id = $page.url.searchParams.get('session1') || randomLetters4();
 	let video: HTMLVideoElement;
-	let remoteCameras: Map<string, HTMLImageElement> = new Map();
-	let cameraDisplayUrls: Map<string, string> = new Map();
+    // --- New Audio Variable ---
+	let backgroundMusic: HTMLAudioElement; 
+    // --------------------------
+	let remoteCameras: Map<string, boolean> = new Map();
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
@@ -17,6 +19,7 @@
 	let useLocalCamera = true;
 	let selectedCamera = 'local';
 	let cameraList: string[] = [];
+	let showQRModal: boolean = false;
 
 	let input = {
 		jumping: false,
@@ -36,20 +39,10 @@
 		connectionColor: 'gray'
 	};
 
-	// --- Leaderboard State ---
-	type LeaderboardEntry = {
-		id: number;
-		score: number;
-		level: number;
-		date: string;
-	};
-	let leaderboard: LeaderboardEntry[] = [];
-	const MAX_ENTRIES = 5;
-
 	function randomLetters4() {
 		const letters = 'abcdefghijklmnopqrstuvwxyz';
 		const result = new Array(4);
-		const bytes = crypto.getRandomValues(new Uint8Array(4));
+		const bytes = crypto.getRandomValues(new Uint8Array(4)); // browser
 		for (let i = 0; i < 4; i++) {
 			result[i] = letters[bytes[i] % letters.length];
 		}
@@ -59,48 +52,27 @@
 	function log(msg: string) {
 		if (debug) console.log(msg);
 	}
+    
+    // --- Audio Control Function ---
+    function startMusic() {
+        if (backgroundMusic) {
+            // Find the element if not already bound
+            if (!backgroundMusic.src) {
+                 backgroundMusic = document.getElementById('bgm') as HTMLAudioElement;
+            }
+            
+            // Check if music is already playing to avoid restarting the loop unnecessarily
+            if (backgroundMusic.paused) {
+                backgroundMusic.volume = 0.5; // Set volume (adjust as needed)
+                backgroundMusic.play().catch(e => {
+                    console.warn("Autoplay prevented, waiting for user interaction.", e);
+                });
+            }
+        }
+    }
+    // ------------------------------
 
-	// --- Leaderboard Functions ---
-
-	function loadLeaderboard() {
-		if (typeof localStorage !== 'undefined') {
-			const saved = localStorage.getItem('spaceCowLeaderboard');
-			if (saved) {
-				leaderboard = JSON.parse(saved);
-			}
-		}
-	}
-
-	function saveLeaderboard() {
-		if (typeof localStorage !== 'undefined') {
-			localStorage.setItem('spaceCowLeaderboard', JSON.stringify(leaderboard));
-		}
-	}
-
-	function addScoreToLeaderboard(newScore: number, newLevel: number) {
-		const newEntry: LeaderboardEntry = {
-			id: Date.now(),
-			score: newScore,
-			level: newLevel,
-			date: new Date().toLocaleDateString()
-		};
-
-		leaderboard.push(newEntry);
-
-		// Sort by score (descending), then by level (descending)
-		leaderboard.sort((a, b) => {
-			if (b.score !== a.score) {
-				return b.score - a.score;
-			}
-			return b.level - a.level;
-		});
-
-		// Keep only the top MAX_ENTRIES
-		leaderboard = leaderboard.slice(0, MAX_ENTRIES);
-
-		saveLeaderboard();
-	}
-
+	// Logic for LOCAL camera (MediaPipe running in this browser)
 	function processResults(poseLandmarkerResult: any) {
 		if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
 			const pose = poseLandmarkerResult.landmarks[0];
@@ -109,7 +81,8 @@
 			if (pose[12]) {
 				debugInfo.shoulderY = pose[12].y;
 			}
-
+            
+            // --- JUMP/CROUCH LOGIC ---
 			if (pose[12] && pose[12].y < 0.33) {
 				input.jumping = true;
 				input.crouching = false;
@@ -120,19 +93,22 @@
 				input.jumping = false;
 				input.crouching = false;
 			}
+            // --- END JUMP/CROUCH LOGIC ---
 
 			// Update debug info
 			debugInfo.jumping = input.jumping;
 			debugInfo.crouching = input.crouching;
 			debugInfo.remoteCameras = remoteCameras.size;
+            
+            // NOTE: If the game starts based purely on the first input,
+            // this is the place where you could call startMusic() if Game.svelte
+            // doesn't dispatch an event. However, using the event is cleaner.
 		}
 	}
 
 	function setupRemoteCameras() {
 		const origin = window.location.origin;
 		log(`Setting up remote cameras`);
-		log(`Session: ${session_id}`);
-		log(`Origin: ${origin}`);
 
 		// Test health endpoint
 		fetch(`${origin}/api/health`)
@@ -154,7 +130,6 @@
 			debugInfo.connectionStatus = 'Connected ✓';
 			debugInfo.connectionColor = 'lime';
 			socket.emit('join_session', { session_id, role: 'game' });
-			log('Sent join_session as game');
 		});
 
 		socket.on('connect_error', (error: any) => {
@@ -175,60 +150,57 @@
 			debugInfo.connectionColor = 'yellow';
 		});
 
-		socket.on('frame', (data: { cameraId: string; blob: any }) => {
-			const { cameraId, blob } = data;
+		// Listen for processed results instead of raw frames
+		socket.on('result', (data: { cameraId: string; result: any }) => {
+			const { cameraId, result } = data;
 
+			// Register new camera if not seen before
 			if (!remoteCameras.has(cameraId)) {
 				log(`✓ New camera connected: ${cameraId}`);
-				remoteCameras.set(cameraId, new Image());
+				remoteCameras.set(cameraId, true);
 				debugInfo.remoteCameras = remoteCameras.size;
 				cameraList = Array.from(remoteCameras.keys());
-				// Auto-select first remote camera if local camera is disabled
+				// Auto-select first remote camera if local camera is disabled or default
 				if (!useLocalCamera && selectedCamera === 'local' && cameraList.length === 1) {
 					selectedCamera = cameraId;
 					log(`Auto-selected camera: ${cameraId}`);
 				}
 			}
 
-			// Only process frames from selected camera
+			// Only process data from the selected camera
 			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
 				return;
 			}
 
-			log(`✓ Processing frame from ${cameraId}`);
+			// Map the received JSON data to game inputs
+			if (result && result.body) {
+				const shoulder = result.body.right_shoulder; // Using right shoulder as in local logic
 
-			// Convert ArrayBuffer back to Blob
-			const blobData = new Blob([blob], { type: 'image/jpeg' });
-			const img = remoteCameras.get(cameraId)!;
-			const url = URL.createObjectURL(blobData);
+				if (shoulder) {
+					debugInfo.shoulderY = shoulder.y;
 
-			// Clean up old display URL
-			if (cameraDisplayUrls.has(cameraId)) {
-				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
-			}
-			cameraDisplayUrls.set(cameraId, url);
+					// Same logic as processResults: < 0.33 jump, > 0.66 crouch
+					if (shoulder.y < 0.33) {
+						input.jumping = true;
+						input.crouching = false;
+					} else if (shoulder.y > 0.66) {
+						input.crouching = true;
+						input.jumping = false;
+					} else {
+						input.jumping = false;
+						input.crouching = false;
+					}
 
-			img.onload = () => {
-				const now = performance.now();
-				if (now - lastProcessTime > PROCESS_INTERVAL && poseLandmarker) {
-					// Use detectForVideo for both video and image sources
-					const result = poseLandmarker.detectForVideo(img, now);
-					processResults(result);
-					lastProcessTime = now;
+					// Update debug info
+					debugInfo.jumping = input.jumping;
+					debugInfo.crouching = input.crouching;
 				}
-				URL.revokeObjectURL(url);
-			};
-			img.src = url;
+			}
 		});
 
 		socket.on('camera_disconnected', (cameraId: string) => {
 			log(`✗ Camera disconnected: ${cameraId}`);
 			remoteCameras.delete(cameraId);
-			// Clean up display URL
-			if (cameraDisplayUrls.has(cameraId)) {
-				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
-				cameraDisplayUrls.delete(cameraId);
-			}
 			debugInfo.remoteCameras = remoteCameras.size;
 			cameraList = Array.from(remoteCameras.keys());
 			// Switch to local if selected camera disconnected
@@ -283,9 +255,6 @@
 		});
 
 		log('MediaPipe ready');
-		
-		// Load the leaderboard from local storage
-		loadLeaderboard(); 
 
 		// Always start local camera
 		if (useLocalCamera) {
@@ -293,39 +262,31 @@
 		}
 
 		setupRemoteCameras();
+        
+        // --- Get Audio Reference ---
+        // We get the reference here, but defer calling startMusic() until gameStart event.
+        backgroundMusic = document.getElementById('bgm') as HTMLAudioElement;
+        // ----------------------------------------------------
 	});
+
+    onDestroy(() => {
+        if (socket) {
+            socket.disconnect();
+        }
+        if (backgroundMusic) {
+            backgroundMusic.pause();
+        }
+    });
 </script>
 
-<div id="game-root">
-	<Game {input} onGameOver={addScoreToLeaderboard} />
+{#if showQRModal}
+	<QRCode {session_id} onClose={() => (showQRModal = false)}></QRCode>
+{/if}
 
-	<div class="leaderboard-overlay">
-		<h3>🏆 Leaderboard</h3>
-		{#if leaderboard.length > 0}
-			<table>
-				<thead>
-					<tr>
-						<th>#</th>
-						<th>Score</th>
-						<th>Level</th>
-						<th>Date</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each leaderboard as entry, i}
-						<tr>
-							<td>{i + 1}</td>
-							<td>{entry.score}</td>
-							<td>{entry.level}</td>
-							<td>{entry.date}</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		{:else}
-			<p>No scores yet. Be the first!</p>
-		{/if}
-	</div>
+<div id="game-root">
+    <Game {input} on:gameStart={startMusic} />
+    
+        <audio id="bgm" loop preload="auto" src="/audio/background-music.mp3"></audio>
 
 	{#if selectedCamera === 'local' && useLocalCamera}
 		<video
@@ -354,11 +315,18 @@
 
 	<div class="bottom-left-info">
 		<div class="remote-indicator">
-			<strong>Session:</strong>
-			{session_id}
-			<br />
-			<strong>Remote Cameras:</strong>
-			{remoteCameras.size}
+			<div class="session-content">
+				<div class="session-left">
+					<strong>Session:</strong>
+					{session_id}
+					<br />
+					<strong>Remote Cameras:</strong>
+					{remoteCameras.size}
+				</div>
+				<div class="session-right">
+					<button class="connect-btn" on:click={() => (showQRModal = true)}> Connect Camera </button>
+				</div>
+			</div>
 		</div>
 
 		{#if debug}
@@ -380,70 +348,87 @@
 
 
 <style>
-	/* ... (Existing styles for #game-root, .video-overlay, etc. remain here) ... */
-	
+	/* NOTE: Ensure all other necessary styles are included in your actual main.css */
+
 	.video-overlay {
-		/* ... existing video styles ... */
-	}
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        width: 160px;
+        height: 120px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        z-index: 5;
+    }
 
 	.camera-preview {
-		/* ... existing camera-preview styles ... */
+        /* ensures the video content is visible */
 	}
 	
 	.camera-selector {
-		/* ... existing camera-selector styles ... */
+        position: absolute;
+        bottom: 145px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 5;
 	}
 
 	.bottom-left-info {
-		/* ... existing bottom-left-info styles ... */
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: white;
+        z-index: 5;
+        font-family: Arial, sans-serif;
 	}
 
 	.remote-indicator {
-		/* ... existing remote-indicator styles ... */
+        background: rgba(0, 0, 0, 0.7);
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.4;
 	}
+
+    .session-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px; /* Spacing between info and button */
+    }
+
+    .connect-btn {
+        background-color: #ffcc00;
+        color: #000;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s;
+    }
+
+    .connect-btn:hover {
+        background-color: #ffda5a;
+    }
 
 	.debug-overlay {
-		/* ... existing debug-overlay styles ... */
+        margin-top: 10px;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 12px;
 	}
-	
-	/* --- NEW LEADERBOARD STYLES --- */
-	.leaderboard-overlay {
-		position: absolute;
-		top: 20px;
-		left: 20px;
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		padding: 15px;
-		border-radius: 10px;
-		max-width: 300px;
-		z-index: 5;
-		box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-	}
-
-	.leaderboard-overlay h3 {
-		margin-top: 0;
-		font-size: 20px;
-		color: #ffcc00;
-	}
-
-	.leaderboard-overlay table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 14px;
-	}
-
-	.leaderboard-overlay th, .leaderboard-overlay td {
-		padding: 5px 10px;
-		text-align: left;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-	}
-
-	.leaderboard-overlay th {
-		color: #aaa;
-		font-weight: bold;
-	}
-
-	.leaderboard-overlay p {
-		font-style: italic;
-	}
+    .debug-overlay h3 {
+        margin-top: 0;
+        font-size: 14px;
+        color: #ffcc00;
+    }
+    .debug-overlay p {
+        margin: 4px 0;
+    }
 </style>
