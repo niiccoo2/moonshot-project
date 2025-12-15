@@ -638,8 +638,8 @@ function drawUI() {
 			ctx.font = 'bold 72px Arial';
 			const titleX = canvas.width / 2 - 320;
 			const titleY = canvas.height / 2 - 80;
-			ctx.strokeText('SPACE COW RUNNER', titleX, titleY);
-			ctx.fillText('SPACE COW RUNNER', titleX, titleY);
+			ctx.strokeText('MooDash', titleX, titleY);
+			ctx.fillText('MooDash', titleX, titleY);
 			ctx.font = 'bold 36px Arial';
 			ctx.strokeText('Jump to start', canvas.width / 2 - 120, titleY + 60);
 			ctx.fillText('Jump to start', canvas.width / 2 - 120, titleY + 60);
