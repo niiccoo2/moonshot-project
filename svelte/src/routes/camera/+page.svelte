@@ -29,7 +29,13 @@
 		debugLog = [logMsg, ...debugLog].slice(0, 10);
 	}
 
-	function drawPoint(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, label?: string) {
+	function drawPoint(
+		ctx: CanvasRenderingContext2D,
+		x: number,
+		y: number,
+		color: string,
+		label?: string
+	) {
 		ctx.strokeStyle = color;
 		ctx.fillStyle = color;
 		ctx.beginPath();
@@ -255,33 +261,46 @@
 	});
 </script>
 
-<h2>Handy Camera Streaming</h2>
-<div id="streamContainer">
-    <video bind:this={video} id="localVideo" autoplay muted playsinline></video>
-    <canvas bind:this={overlayCanvas} id="overlayCanvas"></canvas>
+<div class="container">
+	<h2>Camera Streaming</h2>
+	<div id="streamContainer">
+		<video bind:this={video} id="localVideo" autoplay muted playsinline></video>
+		<canvas bind:this={overlayCanvas} id="overlayCanvas"></canvas>
+	</div>
+	<div id="resultInfo">{resultText}</div>
 </div>
-<div id="resultInfo">{resultText}</div>
 
 <style>
 	:global(body) {
-		font-family: "Segoe UI", system-ui, sans-serif;
-		margin: 1rem;
+		font-family: 'Segoe UI', system-ui, sans-serif;
+		margin: 0;
 		background: #f0f0f0;
 		color: #333;
 	}
-	h2 {
-		margin-top: 0;
+
+	.container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 100vh;
+		padding: 1rem;
 	}
+
+	h2 {
+		margin: 0 0 1rem 0;
+	}
+
 	#streamContainer {
 		position: relative;
-		width: 100%;
-		max-width: 800px;
-		margin-bottom: 0.75rem;
-		/* Fix for cut-off video */
+		width: 100vw;
+		max-width: 640px;
 		aspect-ratio: 4/3;
 		background: #000;
 		overflow: hidden;
+		margin-bottom: 1rem;
 	}
+
 	#localVideo,
 	#overlayCanvas {
 		position: absolute;
@@ -289,18 +308,22 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
-		object-fit: contain; /* Ensure video is not cropped */
+		object-fit: contain;
+		/* transform: scaleX(-1); Flip horizontally */
 	}
+
 	#overlayCanvas {
 		pointer-events: none;
 	}
+
 	#resultInfo {
-		max-width: min(800px, 100%);
-		font-family: "Segoe UI", system-ui, sans-serif;
+		max-width: 640px;
+		width: 100%;
+		font-family: 'Segoe UI', system-ui, sans-serif;
 		line-height: 1.4;
 		background: #fff;
 		padding: 1rem;
 		border-radius: 8px;
-		box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 	}
 </style>
