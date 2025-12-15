@@ -2,34 +2,34 @@ import type { Handle } from '@sveltejs/kit';
 import { Server } from 'socket.io';
 
 const io = new Server();
-
 const sessions = new Map();
 
 io.on('connection', (socket) => {
 	console.log('Client connected:', socket.id);
 
-	socket.on('join_session', ({ session_id, role }) => {
-		console.log(`${socket.id} joining ${session_id} as ${role}`);
+	socket.on('join_session', ({ session_id, role, cameraId }) => {
+		console.log(`${socket.id} joining ${session_id} as ${role}`, cameraId || '');
 		socket.join(session_id);
 
 		if (!sessions.has(session_id)) {
-			sessions.set(session_id, { camera: null, game: null });
+			sessions.set(session_id, { cameras: new Map(), game: null });
 		}
 
 		const session = sessions.get(session_id);
 		if (role === 'camera') {
-			session.camera = socket.id;
+			session.cameras.set(cameraId, socket.id);
+			console.log(`Session ${session_id} now has ${session.cameras.size} cameras`);
 		} else if (role === 'game') {
 			session.game = socket.id;
 		}
 	});
 
-	socket.on('frame', (data) => {
+	socket.on('frame', ({ cameraId, blob }) => {
 		// Find which session this camera belongs to
 		for (const [session_id, session] of sessions.entries()) {
-			if (session.camera === socket.id && session.game) {
-				// Forward frame to the game client
-				io.to(session.game).emit('frame', data);
+			if (session.cameras.has(cameraId) && session.game) {
+				// Forward frame to the game client with cameraId
+				io.to(session.game).emit('frame', { cameraId, blob });
 			}
 		}
 	});
@@ -38,17 +38,25 @@ io.on('connection', (socket) => {
 		console.log('Client disconnected:', socket.id);
 		// Clean up sessions
 		for (const [session_id, session] of sessions.entries()) {
-			if (session.camera === socket.id) session.camera = null;
-			if (session.game === socket.id) session.game = null;
+			// Remove camera
+			for (const [cameraId, socketId] of session.cameras.entries()) {
+				if (socketId === socket.id) {
+					session.cameras.delete(cameraId);
+					console.log(`Camera ${cameraId} disconnected from session ${session_id}`);
+					if (session.game) {
+						io.to(session.game).emit('camera_disconnected', cameraId);
+					}
+				}
+			}
+			// Remove game
+			if (session.game === socket.id) {
+				session.game = null;
+			}
 		}
 	});
 });
 
 export const handle: Handle = async ({ event, resolve }) => {
-	if (event.url.pathname.startsWith('/socket.io')) {
-		// Handle Socket.IO upgrade
-		return new Response(null, { status: 101 });
-	}
 	return resolve(event);
 };
 

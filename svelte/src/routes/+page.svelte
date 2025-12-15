@@ -23,6 +23,54 @@
 		movingLeft: false
 	};
 
+	let debug = true;
+	let debugInfo = {
+		jumping: false,
+		crouching: false,
+		shoulderY: 0,
+		remoteCameras: 0,
+		fps: 0
+	};
+
+	let lastFrameTime = 0;
+	let frameCount = 0;
+
+	function processResults(poseLandmarkerResult: any) {
+		if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
+			const pose = poseLandmarkerResult.landmarks[0];
+
+			// Calculate shoulder position for debug
+			if (pose[12]) {
+				debugInfo.shoulderY = pose[12].y;
+			}
+
+			if (pose[12] && pose[12].y < 0.33) {
+				input.jumping = true;
+				input.crouching = false;
+			} else if (pose[12] && pose[12].y > 0.66) {
+				input.crouching = true;
+				input.jumping = false;
+			} else {
+				input.jumping = false;
+				input.crouching = false;
+			}
+
+			// Update debug info
+			debugInfo.jumping = input.jumping;
+			debugInfo.crouching = input.crouching;
+			debugInfo.remoteCameras = remoteCameras.size;
+
+			// Calculate FPS
+			const now = performance.now();
+			if (now - lastFrameTime > 1000) {
+				debugInfo.fps = frameCount;
+				frameCount = 0;
+				lastFrameTime = now;
+			}
+			frameCount++;
+		}
+	}
+
 	function setupRemoteCameras() {
 		console.log('Setting up remote cameras, session:', session_id);
 		socket = io('http://localhost:3001');
@@ -81,21 +129,21 @@
 		requestAnimationFrame(requestFrame);
 	}
 
-	function processResults(poseLandmarkerResult: any) {
-		if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
-			const pose = poseLandmarkerResult.landmarks[0];
-			if (pose[12] && pose[12].y < 0.33) {
-				input.jumping = true;
-				input.crouching = false;
-			} else if (pose[12] && pose[12].y > 0.66) {
-				input.crouching = true;
-				input.jumping = false;
-			} else {
-				input.jumping = false;
-				input.crouching = false;
-			}
-		}
-	}
+	// function processResults(poseLandmarkerResult: any) {
+	// 	if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
+	// 		const pose = poseLandmarkerResult.landmarks[0];
+	// 		if (pose[12] && pose[12].y < 0.33) {
+	// 			input.jumping = true;
+	// 			input.crouching = false;
+	// 		} else if (pose[12] && pose[12].y > 0.66) {
+	// 			input.crouching = true;
+	// 			input.jumping = false;
+	// 		} else {
+	// 			input.jumping = false;
+	// 			input.crouching = false;
+	// 		}
+	// 	}
+	// }
 
 	onMount(async () => {
 		console.log('Initializing MediaPipe');
@@ -149,6 +197,18 @@
 			🎥 Remote Cameras: {remoteCameras.size}
 		</div>
 	{/if}
+
+	<!-- Debug info -->
+	{#if debug}
+		<div class="debug-overlay">
+			<h3>🐛 Debug Info</h3>
+			<p>FPS: {debugInfo.fps}</p>
+			<p>Shoulder Y: {debugInfo.shoulderY.toFixed(2)}</p>
+			<p>Jumping: {debugInfo.jumping ? '✅' : '❌'}</p>
+			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
+			<p>Remote Cameras: {debugInfo.remoteCameras}</p>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -178,7 +238,34 @@
 		color: white;
 		border-radius: 8px;
 		font-size: 14px;
-		z-index: 10;
+		z-index: 100; /* Increased */
+		line-height: 1.5;
+	}
+
+	.debug-overlay {
+		position: absolute;
+		bottom: 16px;
+		left: 16px;
+		padding: 16px;
+		background: rgba(0, 0, 0, 0.9); /* More opaque */
+		color: #0f0;
+		border: 2px solid #0f0;
+		border-radius: 8px;
+		font-family: monospace;
+		font-size: 14px;
+		z-index: 100; /* Increased from 10 to 100 */
+		min-width: 200px;
+		pointer-events: none; /* Allow clicks to pass through */
+	}
+
+	.debug-overlay h3 {
+		margin: 0 0 10px 0;
+		font-size: 16px;
+		color: #0ff;
+	}
+
+	.debug-overlay p {
+		margin: 4px 0;
 		line-height: 1.5;
 	}
 
