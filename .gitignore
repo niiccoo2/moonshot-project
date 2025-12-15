@@ -11,7 +11,7 @@ node_modules
 .vercel
 .netlify
 .wrangler
-/.svelte-kit
+/svelte/.svelte-kit
 /build
 
 # OS
