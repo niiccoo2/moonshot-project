@@ -9,6 +9,9 @@ import uuid
 import qrcode as qr
 import os as os
 import time
+from threading import Lock
+from collections import defaultdict
+import queue
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -16,6 +19,40 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 PORT = int(os.environ.get("PORT", 7000))
 
 stream_sessions = {}
+processing_queues = defaultdict(lambda: queue.Queue(maxsize=1))
+
+def processing_worker():
+    while True:
+        active_sessions = list(set(stream_sessions.values()))
+        if not active_sessions:
+            socketio.sleep(0.1)
+            continue
+
+        processed_any = False
+        for session_id in active_sessions:
+            q = processing_queues[session_id]
+            try:
+                blob, timestamp = q.get_nowait()
+
+                np_arr = np.frombuffer(blob, np.uint8)
+                frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                app.last_frame = frame
+
+                result = main(frame)
+                payload = {"session_id": session_id, "result": result, "timestamp": timestamp}
+                socketio.emit("result", payload, room=session_id)
+                processed_any = True
+
+                socketio.sleep(0)
+            except queue.Empty:
+                pass
+            except Exception as e:
+                print(f"Worker error: {e}")
+
+        if not processed_any:
+            socketio.sleep(0.01)
+
+socketio.start_background_task(processing_worker)
 
 def get_info(result, name):
     # hands
@@ -88,8 +125,13 @@ def connect_cam():
     session_id_2 = generate_session_id()
     # link = f"https://moonshot.niiccoo2.xyz/connect_cam/{session_id}"
     # link_2 = f"https://moonshot.niiccoo2.xyz/connect_cam/{session_id_2}"
+
+    # link = f"http://{ip}:{PORT}/connect_cam/{session_id}"
+    # link_2 = f"http://{ip}:{PORT}/connect_cam/{session_id_2}"
+
     link = f"http://127.0.0.1:7000/connect_cam/{session_id}"
     link_2 = f"http://127.0.0.1:7000/connect_cam/{session_id_2}"
+
 
     print(f"Here is the link to the session cam connection: {link}")
 
@@ -131,21 +173,16 @@ def handle_frame(blob):
     else:
         emit("frame", blob, broadcast=True, include_self=False)
 
-    np_arr = np.frombuffer(blob, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    app.last_frame = frame
-
-    result = main(frame)
-    payload = {"session_id": session_id, "result": result, "timestamp": int(time.time() * 1000)}
-    if target_room:
-        emit("result", payload, room=target_room)
-    else:
-        emit("result", payload)
-
-    try:
-        print(get_info(result, "body_head_x"), get_info(result, "body_head_y"))
-    except Exception:
-        pass
+    if session_id:
+        q = processing_queues[session_id]
+        try:
+            q.put_nowait((blob, int(time.time() * 1000)))
+        except queue.Full:
+            try:
+                q.get_nowait() # Drop oldest frame
+                q.put_nowait((blob, int(time.time() * 1000)))
+            except:
+                pass
 
 @socketio.on("join_session")
 def handle_join(data):

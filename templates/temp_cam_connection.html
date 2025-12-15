@@ -134,18 +134,20 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: false })
 const captureCanvas = document.createElement("canvas");
 const captureCtx = captureCanvas.getContext("2d");
 let lastSend = 0;
-const sendInterval = 100; // ms
+const sendInterval = 150; // ms
 
 const captureLoop = (timestamp) => {
     if (video.readyState >= video.HAVE_CURRENT_DATA && timestamp - lastSend >= sendInterval) {
-        captureCanvas.width = video.videoWidth;
-        captureCanvas.height = video.videoHeight;
+        // Downscale to reduce bandwidth and processing load
+        const scale = 0.5;
+        captureCanvas.width = video.videoWidth * scale;
+        captureCanvas.height = video.videoHeight * scale;
         captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
         captureCanvas.toBlob(blob => {
             if (blob) {
                 socket.emit("frame", blob);
             }
-        }, "image/jpeg", 0.6);
+        }, "image/jpeg", 0.5);
         lastSend = timestamp;
     }
     requestAnimationFrame(captureLoop);
