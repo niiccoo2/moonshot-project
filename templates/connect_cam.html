@@ -11,36 +11,90 @@
             gap: 1rem;
             align-items: center;
             margin: 1.5rem;
+            min-height: 100vh;
         }
-        #infoSection {
-            width: min(900px, 100%);
-            text-align: center;
+        h1 {
+            margin: 0.25rem 0;
         }
-        #resultInfo {
-            width: min(900px, 100%);
+        #playerGrid {
+            display: flex;
+            gap: 1rem;
+            width: 100%;
+            max-width: 1100px;
+        }
+        .playerCard {
+            flex: 1;
+            border-radius: 16px;
+            padding: 1rem;
             background: #111;
             color: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .playerCard.light {
+            background: #f4f4f4;
+            color: #111;
+        }
+        .playerCard img {
+            width: min(280px, 100%);
+            height: auto;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+        .playerCard a {
+            color: inherit;
+            text-decoration: underline;
+            font-weight: 600;
+        }
+        .resultBox {
+            background: rgba(0, 0, 0, 0.6);
             border-radius: 12px;
             padding: 1rem;
             font-size: 0.95rem;
+            line-height: 1.4;
             white-space: pre-wrap;
+            min-height: 150px;
+        }
+        .playerCard.light .resultBox {
+            background: rgba(255, 255, 255, 0.8);
         }
     </style>
 </head>
 <body>
-<p>Use your mobile device to scan the QR code below. The camera stream stays on your phone, this view only shows recognized keypoints.</p>
-<div id="infoSection">
-    <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code">
-</div>
-<h2>Live Keypoints</h2>
-<div id="resultInfo">Waiting for data …</div>
+<p>Scan the QR code with each mobile device. Each stream stays on the phone and only the keypoint data is forwarded to this control view.</p>
+<section id="playerGrid">
+    <article class="playerCard" data-session="{{ session_id }}">
+        <h1>Player 1</h1>
+        <div>
+            <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code for camera 1">
+            <p><a href="{{ link_qr_code_1 }}" target="_blank">Open camera 1 link</a></p>
+        </div>
+        <h2>Live Keypoints</h2>
+        <div class="resultBox" id="resultInfoPlayer1">Waiting for data …</div>
+    </article>
+    <article class="playerCard light" data-session="{{ session_id_2 }}">
+        <h1>Player 2</h1>
+        <div>
+            <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id_2 + '.png') }}" alt="QR Code for camera 2">
+            <p><a href="{{ link_qr_code_2 }}" target="_blank">Open camera 2 link</a></p>
+        </div>
+        <h2>Live Keypoints</h2>
+        <div class="resultBox" id="resultInfoPlayer2">Waiting for data …</div>
+    </article>
+</section>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const socket = io();
-const sessionId = "{{ session_id }}";
-socket.emit("join_session", { session_id: sessionId });
-const infoDiv = document.getElementById("resultInfo");
+const viewers = {
+    "{{ session_id }}": document.getElementById("resultInfoPlayer1"),
+    "{{ session_id_2 }}": document.getElementById("resultInfoPlayer2")
+};
+
+Object.keys(viewers).forEach(sessionId => {
+    socket.emit("join_session", { session_id: sessionId });
+});
 
 const describeResult = (result) => {
     if (!result) {
@@ -63,8 +117,12 @@ const describeResult = (result) => {
     return lines.join("\n");
 };
 
-socket.on("result", result => {
-    infoDiv.textContent = describeResult(result);
+socket.on("result", payload => {
+    const container = viewers[payload.session_id];
+    if (!container) {
+        return;
+    }
+    container.textContent = describeResult(payload.result);
 });
 </script>
 </body>

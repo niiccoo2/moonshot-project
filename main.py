@@ -84,18 +84,32 @@ def index():
 @app.route("/connect_cam", methods=["GET", "POST"])
 def connect_cam():
     session_id = generate_session_id()
-    link = f"https://moonshot.niiccoo2.xyz/connect_cam/{session_id}"
+    session_id_2 = generate_session_id()
+    # link = f"https://moonshot.niiccoo2.xyz/connect_cam/{session_id}"
+    # link_2 = f"https://moonshot.niiccoo2.xyz/connect_cam/{session_id_2}"
+    link = f"http://127.0.0.1:7000/connect_cam/{session_id}"
+    link_2 = f"http://127.0.0.1:7000/connect_cam/{session_id_2}"
 
     print(f"Here is the link to the session cam connection: {link}")
 
     # make sure that the path to the qr code exists
     os.makedirs(os.path.join("static", "qr_code"), exist_ok=True)
+
+    # qr code 1
     img = qr.make(link)
     img.save(os.path.join("static", "qr_code", f"qr-code-{session_id}.png"))
 
+    # qr code 2
+    img = qr.make(link_2)
+    img.save(os.path.join("static", "qr_code", f"qr-code-{session_id_2}.png"))
+
     return render_template(
         "connect_cam.html",
-        session_id=session_id
+        session_id=session_id,
+        session_id_2=session_id_2,
+        # links from the qr codes
+        link_qr_code_1=link,
+        link_qr_code_2=link_2
     )
 
 
@@ -109,12 +123,8 @@ def session_cam(session_id):
 @socketio.on("frame")
 def handle_frame(blob):
     session_id = stream_sessions.get(request.sid)
-    if session_id:
-        target_room = session_id
-    else:
-        target_room = None
+    target_room = session_id if session_id else None
 
-    # Send frame to other clients (viewer)
     if target_room:
         emit("frame", blob, room=target_room, include_self=False)
     else:
@@ -125,10 +135,11 @@ def handle_frame(blob):
     app.last_frame = frame
 
     result = main(frame)
+    payload = {"session_id": session_id, "result": result}
     if target_room:
-        emit("result", result, room=target_room)
+        emit("result", payload, room=target_room)
     else:
-        emit("result", result)
+        emit("result", payload)
 
     try:
         print(get_info(result, "body_head_x"), get_info(result, "body_head_y"))
@@ -171,4 +182,4 @@ if __name__ == "__main__":
         socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
 
     print(f"Server running under:\nPC: http://127.0.0.1:{PORT}\nWLAN: http://{ip}:{PORT}/")
-    socketio.run(app, host="0.0.0.0", port=7000)
+    socketio.run(app, host="0.0.0.0", port=7000, debug=True)
