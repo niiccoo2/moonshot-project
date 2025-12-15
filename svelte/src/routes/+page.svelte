@@ -4,18 +4,21 @@
 	import Game from '$lib/Game.svelte';
 	import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 	import { io } from 'socket.io-client';
+	import '$lib/main.css';
+	import QRCode from '$lib/QR-Code.svelte';
 
-	let session_id = $page.url.searchParams.get('session') || crypto.randomUUID();
+	let session_id = $page.url.searchParams.get('session') || randomLetters4();
 	let video: HTMLVideoElement;
 	let remoteCameras: Map<string, HTMLImageElement> = new Map();
+	let cameraDisplayUrls: Map<string, string> = new Map(); // Track URLs for display
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
 	let socket: any;
-	let useLocalCamera = true; // Always use local camera by default
-	let useRemoteCameras = $page.url.searchParams.get('remote') === 'true';
+	let useLocalCamera = true;
 	let selectedCamera = 'local'; // 'local' or a specific cameraId
 	let cameraList: string[] = []; // List of available camera IDs
+	let showQRModal: boolean = false;
 
 	let input = {
 		jumping: false,
@@ -25,26 +28,28 @@
 		movingLeft: false
 	};
 
-	let debug = true;
+	let debug = false;
 	let debugInfo = {
 		jumping: false,
 		crouching: false,
 		shoulderY: 0,
 		remoteCameras: 0,
-		fps: 0,
 		connectionStatus: 'Not connected',
 		connectionColor: 'gray'
 	};
 
-	let lastFrameTime = 0;
-	let frameCount = 0;
-	let debugLog: string[] = [];
+	function randomLetters4() {
+		const letters = 'abcdefghijklmnopqrstuvwxyz';
+		const result = new Array(4);
+		const bytes = crypto.getRandomValues(new Uint8Array(4)); // browser
+		for (let i = 0; i < 4; i++) {
+			result[i] = letters[bytes[i] % letters.length];
+		}
+		return result.join('');
+	}
 
 	function log(msg: string) {
-		const timestamp = new Date().toLocaleTimeString();
-		const logMsg = `[${timestamp}] ${msg}`;
-		console.log(logMsg);
-		debugLog = [logMsg, ...debugLog].slice(0, 15);
+		if (debug) console.log(msg);
 	}
 
 	function processResults(poseLandmarkerResult: any) {
@@ -71,15 +76,6 @@
 			debugInfo.jumping = input.jumping;
 			debugInfo.crouching = input.crouching;
 			debugInfo.remoteCameras = remoteCameras.size;
-
-			// Calculate FPS
-			const now = performance.now();
-			if (now - lastFrameTime > 1000) {
-				debugInfo.fps = frameCount;
-				frameCount = 0;
-				lastFrameTime = now;
-			}
-			frameCount++;
 		}
 	}
 
@@ -130,9 +126,8 @@
 			debugInfo.connectionColor = 'yellow';
 		});
 
-		socket.on('frame', (data: { cameraId: string; blob: Blob }) => {
+		socket.on('frame', (data: { cameraId: string; blob: any }) => {
 			const { cameraId, blob } = data;
-			log(`📸 Frame received from ${cameraId} (size: ${blob.size} bytes)`);
 
 			if (!remoteCameras.has(cameraId)) {
 				log(`✓ New camera connected: ${cameraId}`);
@@ -148,18 +143,27 @@
 
 			// Only process frames from selected camera
 			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
-				log(`⏭️ Skipping frame from ${cameraId} (selected: ${selectedCamera})`);
 				return;
 			}
 
-			log(`✅ Processing frame from ${cameraId}`);
+			log(`✓ Processing frame from ${cameraId}`);
+
+			// Convert ArrayBuffer back to Blob
+			const blobData = new Blob([blob], { type: 'image/jpeg' });
 			const img = remoteCameras.get(cameraId)!;
-			const url = URL.createObjectURL(blob);
+			const url = URL.createObjectURL(blobData);
+
+			// Clean up old display URL
+			if (cameraDisplayUrls.has(cameraId)) {
+				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
+			}
+			cameraDisplayUrls.set(cameraId, url);
 
 			img.onload = () => {
 				const now = performance.now();
 				if (now - lastProcessTime > PROCESS_INTERVAL && poseLandmarker) {
-					const result = poseLandmarker.detect(img);
+					// Use detectForVideo for both video and image sources
+					const result = poseLandmarker.detectForVideo(img, now);
 					processResults(result);
 					lastProcessTime = now;
 				}
@@ -171,6 +175,11 @@
 		socket.on('camera_disconnected', (cameraId: string) => {
 			log(`✗ Camera disconnected: ${cameraId}`);
 			remoteCameras.delete(cameraId);
+			// Clean up display URL
+			if (cameraDisplayUrls.has(cameraId)) {
+				URL.revokeObjectURL(cameraDisplayUrls.get(cameraId)!);
+				cameraDisplayUrls.delete(cameraId);
+			}
 			debugInfo.remoteCameras = remoteCameras.size;
 			cameraList = Array.from(remoteCameras.keys());
 			// Switch to local if selected camera disconnected
@@ -182,13 +191,13 @@
 	}
 
 	async function startLocalVideo() {
-		console.log('Starting local video');
+		log('Starting local video');
 		const stream = await navigator.mediaDevices.getUserMedia({
 			video: { width: 320, height: 240 }
 		});
 		video.srcObject = stream;
 		await video.play();
-		console.log('Local video playing');
+		log('Local video playing');
 		requestFrame();
 	}
 
@@ -208,24 +217,8 @@
 		requestAnimationFrame(requestFrame);
 	}
 
-	// function processResults(poseLandmarkerResult: any) {
-	// 	if (poseLandmarkerResult.landmarks && poseLandmarkerResult.landmarks.length > 0) {
-	// 		const pose = poseLandmarkerResult.landmarks[0];
-	// 		if (pose[12] && pose[12].y < 0.33) {
-	// 			input.jumping = true;
-	// 			input.crouching = false;
-	// 		} else if (pose[12] && pose[12].y > 0.66) {
-	// 			input.crouching = true;
-	// 			input.jumping = false;
-	// 		} else {
-	// 			input.jumping = false;
-	// 			input.crouching = false;
-	// 		}
-	// 	}
-	// }
-
 	onMount(async () => {
-		console.log('Initializing MediaPipe');
+		log('Initializing MediaPipe');
 		const vision = await FilesetResolver.forVisionTasks(
 			'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
 		);
@@ -240,50 +233,43 @@
 			numPoses: 1
 		});
 
-		console.log('MediaPipe ready');
+		log('MediaPipe ready');
 
 		// Always start local camera
 		if (useLocalCamera) {
 			startLocalVideo();
 		}
 
-		// Also setup remote cameras if requested
-		if (useRemoteCameras) {
-			setupRemoteCameras();
-		}
+		setupRemoteCameras();
 	});
 </script>
+
+{#if showQRModal}
+	<QRCode {session_id} onClose={() => (showQRModal = false)}></QRCode>
+{/if}
 
 <div id="game-root">
 	<Game {input} />
 
-	<!-- Local camera preview -->
-	{#if useLocalCamera}
+	<!-- Camera preview - shows selected camera -->
+	{#if selectedCamera === 'local' && useLocalCamera}
+		<!-- Local camera preview -->
 		<video
 			bind:this={video}
 			autoplay
 			playsinline
 			style="transform: scaleX(-1);"
-			class="video-overlay local-camera"
+			class="video-overlay camera-preview"
 		></video>
 	{/if}
 
-	<!-- Remote camera indicator -->
-	{#if useRemoteCameras}
-		<div class="remote-indicator">
-			📱 Session: {session_id}
-			<br />
-			🎥 Remote Cameras: {remoteCameras.size}
-		</div>
-	{/if}
-
 	<!-- Camera Selector -->
-	{#if useLocalCamera && useRemoteCameras && cameraList.length > 0}
+	{#if useLocalCamera && cameraList.length > 0}
 		<div class="camera-selector">
-			<strong>🎮 Active Camera:</strong>
+			<strong>Active Camera:</strong>
 			<select
 				bind:value={selectedCamera}
-				on:change={() => log(`Switched to camera: ${selectedCamera}`)}
+				onchange={() => log(`Switched to camera: ${selectedCamera}`)}
 			>
 				<option value="local">Local Camera</option>
 				{#each cameraList as camId}
@@ -293,155 +279,38 @@
 		</div>
 	{/if}
 
-	<!-- Debug info -->
-	{#if debug}
-		<div class="debug-overlay">
-			<h3>🐛 Debug Info</h3>
-			<p>FPS: {debugInfo.fps}</p>
-			<p>Shoulder Y: {debugInfo.shoulderY.toFixed(2)}</p>
-			<p>Jumping: {debugInfo.jumping ? '✅' : '❌'}</p>
-			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
-			<p>Remote Cameras: {debugInfo.remoteCameras}</p>
-			<p>Active Camera: <strong>{selectedCamera}</strong></p>
-			{#if useRemoteCameras}
-				<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
-			{/if}
+	<!-- Bottom Left - Info Container -->
+	<div class="bottom-left-info">
+		<!-- Session Info - Split into left and right -->
+		<div class="remote-indicator">
+			<div class="session-content">
+				<div class="session-left">
+					<strong>Session:</strong>
+					{session_id}
+					<br />
+					<strong>Remote Cameras:</strong>
+					{remoteCameras.size}
+				</div>
+				<div class="session-right">
+					<button class="connect-btn" onclick={() => (showQRModal = true)}> Connect Camera </button>
+				</div>
+			</div>
 		</div>
 
-		<!-- Debug log -->
-		{#if debugLog.length > 0}
-			<div class="debug-log">
-				<strong>🔍 Connection Log:</strong>
-				{#each debugLog as log}
-					<div class="log-entry">{log}</div>
-				{/each}
+		<!-- Debug info -->
+		{#if debug}
+			<div class="debug-overlay">
+				<h3>Debug Info</h3>
+				<p><strong>Shoulder Y:</strong> {debugInfo.shoulderY.toFixed(2)}</p>
+				<p><strong>Jumping:</strong> {debugInfo.jumping ? '✅' : '❌'}</p>
+				<p><strong>Crouching:</strong> {debugInfo.crouching ? '✅' : '❌'}</p>
+				<p><strong>Remote Cameras:</strong> {debugInfo.remoteCameras}</p>
+				<p><strong>Active Camera:</strong> {selectedCamera}</p>
+				<p>
+					<strong>Socket:</strong>
+					<span style="color: {debugInfo.connectionColor}">{debugInfo.connectionStatus}</span>
+				</p>
 			</div>
 		{/if}
-	{/if}
+	</div>
 </div>
-
-<style>
-	.video-overlay {
-		position: absolute;
-		border: 2px solid #fff;
-		border-radius: 8px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-		z-index: 10;
-		background: #000;
-		object-fit: cover;
-	}
-
-	.local-camera {
-		top: 16px;
-		right: 16px;
-		width: 240px;
-		height: 180px;
-	}
-
-	.remote-indicator {
-		position: absolute;
-		top: 16px;
-		left: 16px;
-		padding: 12px 20px;
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		border-radius: 8px;
-		font-size: 14px;
-		z-index: 100; /* Increased */
-		line-height: 1.5;
-	}
-
-	.camera-selector {
-		position: absolute;
-		top: 16px;
-		left: 50%;
-		transform: translateX(-50%);
-		padding: 12px 20px;
-		background: rgba(0, 0, 0, 0.85);
-		color: white;
-		border-radius: 8px;
-		font-size: 14px;
-		z-index: 100;
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
-
-	.camera-selector select {
-		padding: 6px 12px;
-		font-size: 14px;
-		border-radius: 4px;
-		border: 2px solid #4caf50;
-		background: #222;
-		color: white;
-		cursor: pointer;
-	}
-
-	.camera-selector select:hover {
-		border-color: #66ff66;
-	}
-
-	.debug-overlay {
-		position: absolute;
-		bottom: 16px;
-		left: 16px;
-		padding: 16px;
-		background: rgba(0, 0, 0, 0.9); /* More opaque */
-		color: #0f0;
-		border: 2px solid #0f0;
-		border-radius: 8px;
-		font-family: monospace;
-		font-size: 14px;
-		z-index: 100; /* Increased from 10 to 100 */
-		min-width: 200px;
-		pointer-events: none; /* Allow clicks to pass through */
-	}
-
-	.debug-overlay h3 {
-		margin: 0 0 10px 0;
-		font-size: 16px;
-		color: #0ff;
-	}
-
-	.debug-overlay p {
-		margin: 4px 0;
-		line-height: 1.5;
-	}
-
-	.debug-log {
-		position: absolute;
-		bottom: 16px;
-		right: 16px;
-		padding: 12px;
-		background: rgba(0, 0, 0, 0.9);
-		color: #0ff;
-		border: 2px solid #0ff;
-		border-radius: 8px;
-		font-family: 'Courier New', monospace;
-		font-size: 11px;
-		z-index: 100;
-		max-width: 400px;
-		max-height: 400px;
-		overflow-y: auto;
-		pointer-events: none;
-	}
-
-	.debug-log strong {
-		display: block;
-		margin-bottom: 8px;
-		color: #ff0;
-	}
-
-	.log-entry {
-		margin: 3px 0;
-		opacity: 0.9;
-		word-break: break-all;
-	}
-
-	#game-root {
-		position: relative;
-		width: 100vw;
-		height: 100vh;
-		overflow: hidden;
-	}
-</style>
