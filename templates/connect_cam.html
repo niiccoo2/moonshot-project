@@ -12,60 +12,127 @@
             align-items: center;
             margin: 1.5rem;
             min-height: 100vh;
+            background: radial-gradient(circle at top, #1a1a2e, #09090f 80%);
+            color: #fff;
         }
         h1 {
-            margin: 0.25rem 0;
+            margin: 0.2rem 0;
         }
         #playerGrid {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 1rem;
             width: 100%;
             max-width: 1100px;
         }
         .playerCard {
-            flex: 1;
-            border-radius: 16px;
-            padding: 1rem;
-            background: #111;
-            color: #fff;
+            border-radius: 20px;
+            padding: 1.25rem;
+            background: rgba(17, 17, 17, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.75rem;
+            position: relative;
+            overflow: hidden;
         }
         .playerCard.light {
-            background: #f4f4f4;
+            background: rgba(244, 244, 244, 0.9);
             color: #111;
+            border-color: rgba(17, 17, 17, 0.2);
+        }
+        .playerCard::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.35);
+        }
+        .playerCard h2 {
+            margin: 0;
         }
         .playerCard img {
             width: min(280px, 100%);
-            height: auto;
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
+            border-radius: 12px;
+            box-shadow: 0 20px 30px rgba(0, 0, 0, 0.4);
         }
         .playerCard a {
             color: inherit;
-            text-decoration: underline;
+            text-decoration: none;
             font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 999px;
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+        .playerCard a:hover {
+            transform: translateY(-2px);
         }
         .resultBox {
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.35);
             border-radius: 12px;
-            padding: 1rem;
-            font-size: 0.95rem;
+            padding: 0.85rem;
+            font-size: 0.9rem;
             line-height: 1.4;
             white-space: pre-wrap;
-            min-height: 150px;
+            min-height: 140px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
         }
         .playerCard.light .resultBox {
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.6);
+            border-color: rgba(0, 0, 0, 0.2);
+        }
+        .statusLabel {
+            font-size: 0.9rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 999px;
+            text-align: center;
+            width: fit-content;
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            transition: background 0.2s, color 0.2s;
+        }
+        .playerCard.light .statusLabel {
+            color: #111;
+            background: rgba(17, 17, 17, 0.1);
+        }
+        .statusLabel.connected {
+            background: linear-gradient(135deg, #00c853, #b2ff59);
+            color: #000;
+        }
+        .statusLabel.disconnected {
+            background: rgba(255, 75, 43, 0.15);
+            color: #ff8a65;
+        }
+        #startGameBtn {
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 999px;
+            padding: 0.9rem 2.5rem;
+            cursor: pointer;
+            color: #fff;
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            box-shadow: 0 12px 35px rgba(255, 75, 43, 0.45);
+            animation: pulseBtn 2.6s ease-in-out infinite;
+            display: none;
+            margin-top: 1rem;
+        }
+        @keyframes pulseBtn {
+            0% { transform: translateY(0); box-shadow: 0 10px 30px rgba(255, 75, 43, 0.35); }
+            50% { transform: translateY(-6px); box-shadow: 0 20px 45px rgba(255, 75, 43, 0.45); }
+            100% { transform: translateY(0); box-shadow: 0 10px 30px rgba(255, 75, 43, 0.35); }
         }
     </style>
 </head>
 <body>
+<h1>Connect Camera</h1>
 <p>Scan the QR code with each mobile device. Each stream stays on the phone and only the keypoint data is forwarded to this control view.</p>
 <section id="playerGrid">
     <article class="playerCard" data-session="{{ session_id }}">
-        <h1>Player 1</h1>
+        <p class="statusLabel disconnected" id="statusPlayer1">Disconnected</p>
+        <h2>Player 1</h2>
         <div>
             <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id + '.png') }}" alt="QR Code for camera 1">
             <p><a href="{{ link_qr_code_1 }}" target="_blank">Open camera 1 link</a></p>
@@ -74,7 +141,8 @@
         <div class="resultBox" id="resultInfoPlayer1">Waiting for data …</div>
     </article>
     <article class="playerCard light" data-session="{{ session_id_2 }}">
-        <h1>Player 2</h1>
+        <p class="statusLabel disconnected" id="statusPlayer2">Disconnected</p>
+        <h2>Player 2</h2>
         <div>
             <img src="{{ url_for('static', filename='qr_code/qr-code-' + session_id_2 + '.png') }}" alt="QR Code for camera 2">
             <p><a href="{{ link_qr_code_2 }}" target="_blank">Open camera 2 link</a></p>
@@ -83,6 +151,7 @@
         <div class="resultBox" id="resultInfoPlayer2">Waiting for data …</div>
     </article>
 </section>
+<button id="startGameBtn">Start Game</button>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
@@ -91,10 +160,14 @@ const viewers = {
     "{{ session_id }}": document.getElementById("resultInfoPlayer1"),
     "{{ session_id_2 }}": document.getElementById("resultInfoPlayer2")
 };
-
-Object.keys(viewers).forEach(sessionId => {
-    socket.emit("join_session", { session_id: sessionId });
-});
+const statusElements = {
+    "{{ session_id }}": document.getElementById("statusPlayer1"),
+    "{{ session_id_2 }}": document.getElementById("statusPlayer2")
+};
+const globalStatus = document.getElementById("connectionStatus");
+const startButton = document.getElementById("startGameBtn");
+const requiredSessions = Object.keys(viewers).length;
+const connectedSessions = new Set();
 
 const describeResult = (result) => {
     if (!result) {
@@ -117,12 +190,64 @@ const describeResult = (result) => {
     return lines.join("\n");
 };
 
+Object.keys(viewers).forEach(sessionId => {
+    socket.emit("join_session", { session_id: sessionId });
+});
+
+const setStatusLabel = (sessionId, connected) => {
+    const el = statusElements[sessionId];
+    if (!el) {
+        return;
+    }
+    el.textContent = connected ? "Connected" : "Disconnected";
+    el.classList.toggle("connected", connected);
+    el.classList.toggle("disconnected", !connected);
+};
+
+const updateGlobalStatus = () => {
+    const missing = requiredSessions - connectedSessions.size;
+    if (missing === 0) {
+        globalStatus.textContent = "All cameras connected.";
+        globalStatus.classList.add("connected");
+        globalStatus.classList.remove("disconnected");
+        startButton.style.display = "inline-flex";
+    } else {
+        globalStatus.textContent = `Waiting for ${missing} camera${missing === 1 ? "" : "s"} to connect…`;
+        globalStatus.classList.remove("connected");
+        globalStatus.classList.add("disconnected");
+        startButton.style.display = "none";
+    }
+};
+
+const markConnected = (sessionId) => {
+    if (connectedSessions.has(sessionId)) {
+        return;
+    }
+    connectedSessions.add(sessionId);
+    setStatusLabel(sessionId, true);
+    updateGlobalStatus();
+};
+
 socket.on("result", payload => {
     const container = viewers[payload.session_id];
     if (!container) {
         return;
     }
     container.textContent = describeResult(payload.result);
+    markConnected(payload.session_id);
+});
+
+socket.on("disconnect", () => {
+    connectedSessions.clear();
+    Object.keys(viewers).forEach(sessionId => {
+        setStatusLabel(sessionId, false);
+    });
+    updateGlobalStatus();
+});
+
+startButton.addEventListener("click", () => {
+    startButton.textContent = "Game ready!";
+    startButton.style.pointerEvents = "none";
 });
 </script>
 </body>

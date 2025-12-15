@@ -33,6 +33,6 @@ vite.config.ts.timestamp-*
 # QR codes
 qr_code
 
-# svelve
+# svelte
 .svelte-kit
-
+svelte
