@@ -182,4 +182,4 @@ if __name__ == "__main__":
         socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
 
     print(f"Server running under:\nPC: http://127.0.0.1:{PORT}\nWLAN: http://{ip}:{PORT}/")
-    socketio.run(app, host="0.0.0.0", port=7000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=7000)
