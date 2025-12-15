@@ -2,17 +2,25 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { io } from 'socket.io-client';
+	import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 	let session_id = $page.url.searchParams.get('session') || 'default';
 	let cameraId = crypto.randomUUID().slice(0, 8);
 	let video: HTMLVideoElement;
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D;
+	let overlayCanvas: HTMLCanvasElement;
+	let overlayCtx: CanvasRenderingContext2D;
+	let resultText = 'Waiting for keypoints...';
 	let socket: any;
 	let streaming = false;
 	let connectionStatus = 'Connecting...';
 	let connectionColor = 'yellow';
 	let debugLog: string[] = [];
+
+	let handLandmarker: HandLandmarker;
+	let poseLandmarker: PoseLandmarker;
+	let lastVideoTime = -1;
 
 	function log(msg: string) {
 		const timestamp = new Date().toLocaleTimeString();
@@ -21,10 +29,103 @@
 		debugLog = [logMsg, ...debugLog].slice(0, 10);
 	}
 
+	function drawPoint(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, label?: string) {
+		ctx.strokeStyle = color;
+		ctx.fillStyle = color;
+		ctx.beginPath();
+		ctx.arc(x, y, 6, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.stroke();
+		if (label) {
+			ctx.font = '12px sans-serif';
+			ctx.fillText(label, x + 8, y - 6);
+		}
+	}
+
+	function drawKeypoints(result: any) {
+		if (!overlayCanvas || !video) return;
+
+		// Match overlay size to video size
+		if (overlayCanvas.width !== video.videoWidth || overlayCanvas.height !== video.videoHeight) {
+			overlayCanvas.width = video.videoWidth;
+			overlayCanvas.height = video.videoHeight;
+		}
+
+		const width = overlayCanvas.width;
+		const height = overlayCanvas.height;
+		overlayCtx.clearRect(0, 0, width, height);
+
+		if (!result) return;
+
+		const toPx = (value: number, dimension: number) => value * dimension;
+
+		if (result.body) {
+			Object.entries(result.body).forEach(([key, point]: [string, any]) => {
+				if (point && point.x != null && point.y != null) {
+					const px = toPx(point.x, width);
+					const py = toPx(point.y, height);
+					drawPoint(overlayCtx, px, py, 'lime', key);
+				}
+			});
+		}
+
+		['left', 'right'].forEach((side) => {
+			const hand = result.hands?.[side];
+			if (hand?.wrist) {
+				const px = toPx(hand.wrist.x, width);
+				const py = toPx(hand.wrist.y, height);
+				const color = side === 'left' ? 'cyan' : 'orange';
+				drawPoint(overlayCtx, px, py, color, `${side} wrist`);
+			}
+		});
+	}
+
+	function describeResult(result: any) {
+		if (!result) {
+			return 'No keypoints detected.';
+		}
+		const lines: string[] = [];
+		if (result.body?.head) {
+			lines.push(`Head: (${result.body.head.x.toFixed(2)}, ${result.body.head.y.toFixed(2)})`);
+		}
+		['left', 'right'].forEach((side) => {
+			const hand = result.hands?.[side];
+			if (hand) {
+				lines.push(`${side} hand: ${hand.gesture} (${hand.fingers} fingers)`);
+			}
+		});
+		return lines.length ? lines.join(' | ') : 'No hands detected.';
+	}
+
 	onMount(async () => {
 		const origin = window.location.origin;
 		log(`Page loaded, origin: ${origin}`);
 		log(`Session: ${session_id}, Camera: ${cameraId}`);
+
+		// Initialize MediaPipe
+		try {
+			const vision = await FilesetResolver.forVisionTasks(
+				'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
+			);
+			handLandmarker = await HandLandmarker.createFromOptions(vision, {
+				baseOptions: {
+					modelAssetPath: '/models/hand_landmarker.task',
+					delegate: 'GPU'
+				},
+				runningMode: 'VIDEO',
+				numHands: 2
+			});
+			poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+				baseOptions: {
+					modelAssetPath: '/models/pose_landmarker_lite.task',
+					delegate: 'GPU'
+				},
+				runningMode: 'VIDEO'
+			});
+			log('MediaPipe initialized');
+		} catch (e: any) {
+			log(`MediaPipe init failed: ${e.message}`);
+		}
 
 		// Test health endpoint
 		try {
@@ -70,106 +171,136 @@
 			connectionColor = 'yellow';
 		});
 
-		canvas = document.createElement('canvas');
-		canvas.width = 320;
-		canvas.height = 240;
-		ctx = canvas.getContext('2d')!;
-
-		const stream = await navigator.mediaDevices.getUserMedia({
-			video: { width: 320, height: 240, facingMode: 'user' }
+		socket.on('result', (result: any) => {
+			drawKeypoints(result);
+			resultText = describeResult(result);
 		});
-		video.srcObject = stream;
+
+		// Removed canvas creation for frame sending as we process locally now
+		if (overlayCanvas) {
+			overlayCtx = overlayCanvas.getContext('2d')!;
+		}
+
+		video.srcObject = await navigator.mediaDevices.getUserMedia({
+			video: { facingMode: 'user' } // Let browser decide resolution
+		});
 		await video.play();
 		streaming = true;
 
-		setInterval(() => {
-			if (streaming && ctx) {
-				ctx.drawImage(video, 0, 0, 320, 240);
-				canvas.toBlob(
-					(blob) => {
-						if (blob && socket.connected) {
-							socket.emit('frame', { cameraId, blob });
+		const processLoop = async () => {
+			if (streaming && video && video.readyState >= video.HAVE_CURRENT_DATA) {
+				const timestamp = performance.now();
+				if (timestamp !== lastVideoTime) {
+					lastVideoTime = timestamp;
+
+					let result: any = { body: null, hands: { left: null, right: null } };
+
+					if (poseLandmarker) {
+						const poseResult = poseLandmarker.detectForVideo(video, timestamp);
+						if (poseResult.landmarks && poseResult.landmarks.length > 0) {
+							const lm = poseResult.landmarks[0];
+							// Map MediaPipe Pose landmarks to our format
+							// 0: nose, 11: left_shoulder, 12: right_shoulder, 13: left_elbow, 14: right_elbow
+							result.body = {
+								head: { x: lm[0].x, y: lm[0].y },
+								left_shoulder: { x: lm[11].x, y: lm[11].y },
+								right_shoulder: { x: lm[12].x, y: lm[12].y },
+								left_elbow: { x: lm[13].x, y: lm[13].y },
+								right_elbow: { x: lm[14].x, y: lm[14].y }
+							};
 						}
-					},
-					'image/jpeg',
-					0.7
-				);
+					}
+
+					if (handLandmarker) {
+						const handResult = handLandmarker.detectForVideo(video, timestamp);
+						if (handResult.landmarks && handResult.handedness) {
+							for (let i = 0; i < handResult.handedness.length; i++) {
+								const handedness = handResult.handedness[i][0];
+								const landmarks = handResult.landmarks[i];
+								const side = handedness.categoryName.toLowerCase(); // "Left" or "Right" -> "left" or "right"
+
+								// Simple gesture detection (count extended fingers)
+								// Tips: 4 (Thumb), 8 (Index), 12 (Middle), 16 (Ring), 20 (Pinky)
+								// PIPs: 2, 6, 10, 14, 18
+								let fingers = 0;
+								// Thumb is tricky, check x distance for now or skip
+								if (landmarks[4].y < landmarks[3].y) fingers++; // Very rough
+								if (landmarks[8].y < landmarks[6].y) fingers++;
+								if (landmarks[12].y < landmarks[10].y) fingers++;
+								if (landmarks[16].y < landmarks[14].y) fingers++;
+								if (landmarks[20].y < landmarks[18].y) fingers++;
+
+								result.hands[side] = {
+									fingers: fingers,
+									gesture: fingers > 0 ? 'open' : 'closed', // Placeholder
+									wrist: { x: landmarks[0].x, y: landmarks[0].y }
+								};
+							}
+						}
+					}
+
+					// Draw locally
+					drawKeypoints(result);
+					resultText = describeResult(result);
+
+					// Send result to server
+					if (socket && socket.connected) {
+						socket.emit('result', { cameraId, result, timestamp: Date.now() });
+					}
+				}
 			}
-		}, 66);
+			requestAnimationFrame(processLoop);
+		};
+		requestAnimationFrame(processLoop);
 	});
 </script>
 
-<div class="container">
-	<h1>📹 Camera Connected</h1>
-	<p class="session-id">Session: <strong>{session_id}</strong></p>
-	<p class="camera-id">Camera ID: <strong>{cameraId}</strong></p>
-	<p class="connection" style="color: {connectionColor}; font-weight: bold;">{connectionStatus}</p>
-	<video bind:this={video} autoplay playsinline muted class="preview"></video>
-	<p class="status">{streaming ? '🟢 Streaming' : '⚪ Waiting...'}</p>
-
-	<div class="debug-log">
-		<strong>Debug Log:</strong>
-		{#each debugLog as log}
-			<div class="log-entry">{log}</div>
-		{/each}
-	</div>
+<h2>Handy Camera Streaming</h2>
+<div id="streamContainer">
+    <video bind:this={video} id="localVideo" autoplay muted playsinline></video>
+    <canvas bind:this={overlayCanvas} id="overlayCanvas"></canvas>
 </div>
+<div id="resultInfo">{resultText}</div>
 
 <style>
-	.container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		min-height: 100vh;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		color: white;
-		padding: 20px;
-		font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+	:global(body) {
+		font-family: "Segoe UI", system-ui, sans-serif;
+		margin: 1rem;
+		background: #f0f0f0;
+		color: #333;
 	}
-	h1 {
-		font-size: 48px;
-		margin-bottom: 10px;
+	h2 {
+		margin-top: 0;
 	}
-	.session-id,
-	.camera-id {
-		font-size: 18px;
-		margin-bottom: 10px;
-		opacity: 0.9;
+	#streamContainer {
+		position: relative;
+		width: 100%;
+		max-width: 800px;
+		margin-bottom: 0.75rem;
+		/* Fix for cut-off video */
+		aspect-ratio: 4/3;
+		background: #000;
+		overflow: hidden;
 	}
-	.preview {
-		width: 90%;
-		max-width: 640px;
-		border: 4px solid rgba(255, 255, 255, 0.3);
-		border-radius: 16px;
-		margin: 20px 0;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-		transform: scaleX(-1);
+	#localVideo,
+	#overlayCanvas {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: contain; /* Ensure video is not cropped */
 	}
-	.connection {
-		font-size: 18px;
-		margin: 10px 0;
+	#overlayCanvas {
+		pointer-events: none;
 	}
-	.status {
-		font-size: 28px;
-	}
-	.debug-log {
-		margin-top: 20px;
-		background: rgba(0, 0, 0, 0.3);
-		padding: 15px;
+	#resultInfo {
+		max-width: min(800px, 100%);
+		font-family: "Segoe UI", system-ui, sans-serif;
+		line-height: 1.4;
+		background: #fff;
+		padding: 1rem;
 		border-radius: 8px;
-		width: 90%;
-		max-width: 600px;
-		max-height: 300px;
-		overflow-y: auto;
-		text-align: left;
-		font-size: 12px;
-		font-family: 'Courier New', monospace;
-	}
-	.log-entry {
-		margin: 4px 0;
-		opacity: 0.9;
-		margin: 10px 0;
-		font-weight: bold;
+		box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 	}
 </style>
