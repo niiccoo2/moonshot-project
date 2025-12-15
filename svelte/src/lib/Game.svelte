@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { io } from 'socket.io-client';
 
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D;
@@ -768,9 +767,6 @@
 		navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
 			video.srcObject = stream;
 		});
-
-		// Socket setup
-		socket = io();
 
 		cameraInterval = setInterval(() => {
 			cameraCtx.drawImage(video, 0, 0, 320, 240);
