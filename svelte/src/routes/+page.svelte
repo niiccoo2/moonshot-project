@@ -35,15 +35,8 @@
 		connectionColor: 'gray'
 	};
 
-	let lastFrameTime = 0;
-	let frameCount = 0;
-	let debugLog: string[] = [];
-
 	function log(msg: string) {
-		const timestamp = new Date().toLocaleTimeString();
-		const logMsg = `[${timestamp}] ${msg}`;
-		console.log(logMsg);
-		debugLog = [logMsg, ...debugLog].slice(0, 15);
+		if (debug) console.log(msg);
 	}
 
 	function processResults(poseLandmarkerResult: any) {
@@ -185,13 +178,13 @@
 	}
 
 	async function startLocalVideo() {
-		console.log('Starting local video');
+		log('Starting local video');
 		const stream = await navigator.mediaDevices.getUserMedia({
 			video: { width: 320, height: 240 }
 		});
 		video.srcObject = stream;
 		await video.play();
-		console.log('Local video playing');
+		log('Local video playing');
 		requestFrame();
 	}
 
@@ -228,7 +221,7 @@
 	// }
 
 	onMount(async () => {
-		console.log('Initializing MediaPipe');
+		log('Initializing MediaPipe');
 		const vision = await FilesetResolver.forVisionTasks(
 			'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
 		);
@@ -243,7 +236,7 @@
 			numPoses: 1
 		});
 
-		console.log('MediaPipe ready');
+		log('MediaPipe ready');
 
 		// Always start local camera
 		if (useLocalCamera) {
@@ -313,16 +306,6 @@
 			<p>Active Camera: <strong>{selectedCamera}</strong></p>
 			<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
 		</div>
-
-		<!-- Debug log -->
-		{#if debugLog.length > 0}
-			<div class="debug-log">
-				<strong>🔍 Connection Log:</strong>
-				{#each debugLog as log}
-					<div class="log-entry">{log}</div>
-				{/each}
-			</div>
-		{/if}
 	{/if}
 </div>
 
@@ -431,36 +414,6 @@
 	.debug-overlay p {
 		margin: 4px 0;
 		line-height: 1.5;
-	}
-
-	.debug-log {
-		position: absolute;
-		bottom: 16px;
-		right: 16px;
-		padding: 12px;
-		background: rgba(0, 0, 0, 0.9);
-		color: #0ff;
-		border: 2px solid #0ff;
-		border-radius: 8px;
-		font-family: 'Courier New', monospace;
-		font-size: 11px;
-		z-index: 100;
-		max-width: 400px;
-		max-height: 400px;
-		overflow-y: auto;
-		pointer-events: none;
-	}
-
-	.debug-log strong {
-		display: block;
-		margin-bottom: 8px;
-		color: #ff0;
-	}
-
-	.log-entry {
-		margin: 3px 0;
-		opacity: 0.9;
-		word-break: break-all;
 	}
 
 	#game-root {
