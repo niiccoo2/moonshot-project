@@ -204,16 +204,8 @@
 					if (poseLandmarker) {
 						const poseResult = poseLandmarker.detectForVideo(video, timestamp);
 						if (poseResult.landmarks && poseResult.landmarks.length > 0) {
-							const lm = poseResult.landmarks[0];
-							// Map MediaPipe Pose landmarks to our format
-							// 0: nose, 11: left_shoulder, 12: right_shoulder, 13: left_elbow, 14: right_elbow
-							result.body = {
-								head: { x: lm[0].x, y: lm[0].y },
-								left_shoulder: { x: lm[11].x, y: lm[11].y },
-								right_shoulder: { x: lm[12].x, y: lm[12].y },
-								left_elbow: { x: lm[13].x, y: lm[13].y },
-								right_elbow: { x: lm[14].x, y: lm[14].y }
-							};
+							// Send the full landmark array (this is what the game expects)
+							result.body = poseResult.landmarks[0];
 						}
 					}
 
@@ -245,11 +237,46 @@
 						}
 					}
 
-					// Draw locally
-					drawKeypoints(result);
-					resultText = describeResult(result);
+					// Draw locally using the landmark array
+					if (result.body) {
+						const lm = result.body;
+						const width = overlayCanvas.width;
+						const height = overlayCanvas.height;
+						overlayCtx.clearRect(0, 0, width, height);
 
-					// Send result to server
+						// Draw key pose points
+						const keyPoints = [
+							{ idx: 0, label: 'nose', color: 'yellow' },
+							{ idx: 11, label: 'L_shoulder', color: 'lime' },
+							{ idx: 12, label: 'R_shoulder', color: 'lime' },
+							{ idx: 13, label: 'L_elbow', color: 'cyan' },
+							{ idx: 14, label: 'R_elbow', color: 'cyan' }
+						];
+
+						keyPoints.forEach(({ idx, label, color }) => {
+							if (lm[idx]) {
+								const px = lm[idx].x * width;
+								const py = lm[idx].y * height;
+								drawPoint(overlayCtx, px, py, color, label);
+							}
+						});
+
+						// Update result text with shoulder Y position
+						resultText = `Shoulder Y: ${lm[12]?.y.toFixed(2) || 'N/A'}`;
+					}
+
+					// Draw hands
+					['left', 'right'].forEach((side) => {
+						const hand = result.hands?.[side];
+						if (hand?.wrist) {
+							const px = hand.wrist.x * overlayCanvas.width;
+							const py = hand.wrist.y * overlayCanvas.height;
+							const color = side === 'left' ? 'cyan' : 'orange';
+							drawPoint(overlayCtx, px, py, color, `${side} wrist`);
+						}
+					});
+
+					// Send result to server with full body landmark array
 					if (socket && socket.connected) {
 						socket.emit('result', { cameraId, result, timestamp: Date.now() });
 					}

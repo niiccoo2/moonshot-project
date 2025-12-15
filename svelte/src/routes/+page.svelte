@@ -401,13 +401,9 @@
 			<div class="session-content">
 				<div class="session-left">
 					<strong>Session:</strong>
-
 					{session_id}
-
 					<br />
-
 					<strong>Remote Cameras:</strong>
-
 					{remoteCameras.size}
 				</div>
 
@@ -433,105 +429,3 @@
 		{/if}
 	</div>
 </div>
-
-<style>
-	.video-overlay {
-		position: absolute;
-		top: 10px;
-		right: 10px;
-		width: 160px; /* Smaller size for preview */
-		height: 120px;
-		border: 3px solid #fff;
-		border-radius: 8px;
-		object-fit: cover;
-		z-index: 5;
-		box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-	}
-
-	.camera-selector {
-		position: absolute;
-		top: 140px;
-		right: 10px;
-		padding: 5px;
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		border-radius: 5px;
-		z-index: 5;
-		font-size: 12px;
-	}
-
-	.bottom-left-info {
-		position: absolute;
-		bottom: 10px;
-		left: 10px;
-		z-index: 5;
-	}
-
-	.remote-indicator {
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		padding: 10px;
-		border-radius: 5px;
-		font-size: 14px;
-	}
-
-	.debug-overlay {
-		background: rgba(0, 0, 0, 0.85);
-		color: white;
-		padding: 10px;
-		border-radius: 5px;
-		margin-top: 10px;
-		font-family: monospace;
-		font-size: 12px;
-	}
-
-	.debug-overlay h3 {
-		margin-top: 0;
-		font-size: 14px;
-		border-bottom: 1px solid #333;
-		padding-bottom: 5px;
-		margin-bottom: 5px;
-	}
-
-	/* --- LEADERBOARD STYLES --- */
-	.leaderboard-overlay {
-		position: absolute;
-		top: 20px;
-		left: 20px;
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		padding: 15px;
-		border-radius: 10px;
-		max-width: 300px;
-		z-index: 5;
-		box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-	}
-
-	.leaderboard-overlay h3 {
-		margin-top: 0;
-		font-size: 20px;
-		color: #ffcc00;
-	}
-
-	.leaderboard-overlay table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 14px;
-	}
-
-	.leaderboard-overlay th,
-	.leaderboard-overlay td {
-		padding: 5px 10px;
-		text-align: left;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-	}
-
-	.leaderboard-overlay th {
-		color: #aaa;
-		font-weight: bold;
-	}
-
-	.leaderboard-overlay p {
-		font-style: italic;
-	}
-</style>
