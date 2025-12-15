@@ -16,8 +16,8 @@
 	const PROCESS_INTERVAL = 200;
 	let socket: any;
 	let useLocalCamera = true;
-	let selectedCamera = 'local'; // 'local' or a specific cameraId
-	let cameraList: string[] = []; // List of available camera IDs
+	let selectedCamera = 'local';
+	let cameraList: string[] = [];
 	let showQRModal: boolean = false;
 
 	let input = {
