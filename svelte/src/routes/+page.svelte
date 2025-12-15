@@ -255,16 +255,6 @@
 			style="transform: scaleX(-1);"
 			class="video-overlay camera-preview"
 		></video>
-	{:else if selectedCamera !== 'local' && cameraDisplayUrls.has(selectedCamera)}
-		<!-- Remote camera preview -->
-		<div class="video-overlay camera-preview remote-preview">
-			<img
-				src={cameraDisplayUrls.get(selectedCamera)}
-				alt="Remote camera"
-				style="transform: scaleX(-1); width: 100%; height: 100%; object-fit: cover;"
-			/>
-			<div class="remote-label">Remote: {selectedCamera}</div>
-		</div>
 	{/if}
 
 	<!-- Remote camera indicator -->
