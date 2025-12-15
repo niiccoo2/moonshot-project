@@ -14,6 +14,8 @@
 	let socket: any;
 	let useLocalCamera = true; // Always use local camera by default
 	let useRemoteCameras = $page.url.searchParams.get('remote') === 'true';
+	let selectedCamera = 'local'; // 'local' or a specific cameraId
+	let cameraList: string[] = []; // List of available camera IDs
 
 	let input = {
 		jumping: false,
@@ -132,7 +134,20 @@
 			const { cameraId, blob } = data;
 
 			if (!remoteCameras.has(cameraId)) {
+				log(`✓ New camera connected: ${cameraId}`);
 				remoteCameras.set(cameraId, new Image());
+				debugInfo.remoteCameras = remoteCameras.size;
+				cameraList = Array.from(remoteCameras.keys());
+				// Auto-select first remote camera if local camera is disabled
+				if (!useLocalCamera && selectedCamera === 'local' && cameraList.length === 1) {
+					selectedCamera = cameraId;
+					log(`Auto-selected camera: ${cameraId}`);
+				}
+			}
+
+			// Only process frames from selected camera
+			if (selectedCamera !== 'local' && cameraId !== selectedCamera) {
+				return;
 			}
 
 			const img = remoteCameras.get(cameraId)!;
@@ -151,8 +166,15 @@
 		});
 
 		socket.on('camera_disconnected', (cameraId: string) => {
-			console.log('Camera disconnected:', cameraId);
+			log(`✗ Camera disconnected: ${cameraId}`);
 			remoteCameras.delete(cameraId);
+			debugInfo.remoteCameras = remoteCameras.size;
+			cameraList = Array.from(remoteCameras.keys());
+			// Switch to local if selected camera disconnected
+			if (selectedCamera === cameraId) {
+				selectedCamera = 'local';
+				log('Selected camera disconnected, switching to local');
+			}
 		});
 	}
 
@@ -169,7 +191,13 @@
 
 	function requestFrame() {
 		const now = performance.now();
-		if (now - lastProcessTime > PROCESS_INTERVAL && poseLandmarker && video) {
+		// Only process local camera if it's selected
+		if (
+			selectedCamera === 'local' &&
+			now - lastProcessTime > PROCESS_INTERVAL &&
+			poseLandmarker &&
+			video
+		) {
 			const result = poseLandmarker.detectForVideo(video, now);
 			processResults(result);
 			lastProcessTime = now;
@@ -246,6 +274,22 @@
 		</div>
 	{/if}
 
+	<!-- Camera Selector -->
+	{#if useLocalCamera && useRemoteCameras && cameraList.length > 0}
+		<div class="camera-selector">
+			<strong>🎮 Active Camera:</strong>
+			<select
+				bind:value={selectedCamera}
+				on:change={() => log(`Switched to camera: ${selectedCamera}`)}
+			>
+				<option value="local">Local Camera</option>
+				{#each cameraList as camId}
+					<option value={camId}>Remote: {camId}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
+
 	<!-- Debug info -->
 	{#if debug}
 		<div class="debug-overlay">
@@ -301,6 +345,36 @@
 		font-size: 14px;
 		z-index: 100; /* Increased */
 		line-height: 1.5;
+	}
+
+	.camera-selector {
+		position: absolute;
+		top: 16px;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 12px 20px;
+		background: rgba(0, 0, 0, 0.85);
+		color: white;
+		border-radius: 8px;
+		font-size: 14px;
+		z-index: 100;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.camera-selector select {
+		padding: 6px 12px;
+		font-size: 14px;
+		border-radius: 4px;
+		border: 2px solid #4caf50;
+		background: #222;
+		color: white;
+		cursor: pointer;
+	}
+
+	.camera-selector select:hover {
+		border-color: #66ff66;
 	}
 
 	.debug-overlay {
