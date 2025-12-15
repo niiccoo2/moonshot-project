@@ -52,6 +52,25 @@ io.on('connection', (socket) => {
 		}
 	});
 
+	socket.on('result', ({ cameraId, result, timestamp }) => {
+		// console.log(`[RESULT] Received from camera ${cameraId}`);
+		let found = false;
+		for (const [session_id, session] of sessions.entries()) {
+			if (session.cameras.has(cameraId)) {
+				found = true;
+				if (session.game) {
+					// console.log(`[RESULT] Relaying to game ${session.game} in session ${session_id}`);
+					io.to(session.game).emit('result', { session_id, result, timestamp });
+				} else {
+					console.log(`[RESULT] Session ${session_id} has camera ${cameraId} but NO GAME connected`);
+				}
+			}
+		}
+		if (!found) {
+			console.log(`[RESULT] Camera ${cameraId} not found in any session`);
+		}
+	});
+
 	socket.on('disconnect', () => {
 		console.log('Client disconnected:', socket.id);
 		for (const [session_id, session] of sessions.entries()) {
