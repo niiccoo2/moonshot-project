@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import Game from '$lib/Game.svelte';
 	import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
@@ -9,7 +9,10 @@
 
 	let session_id = $page.url.searchParams.get('session1') || randomLetters4();
 	let video: HTMLVideoElement;
-	let remoteCameras: Map<string, boolean> = new Map(); // Changed to boolean as we don't store images anymore
+    // --- New Audio Variable ---
+	let backgroundMusic: HTMLAudioElement; 
+    // --------------------------
+	let remoteCameras: Map<string, boolean> = new Map();
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
@@ -50,6 +53,25 @@
 	function log(msg: string) {
 		if (debug) console.log(msg);
 	}
+    
+    // --- Audio Control Function ---
+    function startMusic() {
+        if (backgroundMusic) {
+            // Find the element if not already bound
+            if (!backgroundMusic.src) {
+                 backgroundMusic = document.getElementById('bgm') as HTMLAudioElement;
+            }
+            
+            // Check if music is already playing to avoid restarting the loop unnecessarily
+            if (backgroundMusic.paused) {
+                backgroundMusic.volume = 0.5; // Set volume (adjust as needed)
+                backgroundMusic.play().catch(e => {
+                    console.warn("Autoplay prevented, waiting for user interaction.", e);
+                });
+            }
+        }
+    }
+    // ------------------------------
 
 	// Logic for LOCAL camera (MediaPipe running in this browser)
 	function processResults(poseLandmarkerResult: any) {
@@ -60,7 +82,8 @@
 			if (pose[12]) {
 				debugInfo.shoulderY = pose[12].y;
 			}
-
+            
+            // --- JUMP/CROUCH LOGIC ---
 			if (pose[12] && pose[12].y < 0.33) {
 				input.jumping = true;
 				input.crouching = false;
@@ -71,19 +94,22 @@
 				input.jumping = false;
 				input.crouching = false;
 			}
+            // --- END JUMP/CROUCH LOGIC ---
 
 			// Update debug info
 			debugInfo.jumping = input.jumping;
 			debugInfo.crouching = input.crouching;
 			debugInfo.remoteCameras = remoteCameras.size;
+            
+            // NOTE: If the game starts based purely on the first input,
+            // this is the place where you could call startMusic() if Game.svelte
+            // doesn't dispatch an event. However, using the event is cleaner.
 		}
 	}
 
 	function setupRemoteCameras() {
 		const origin = window.location.origin;
 		log(`Setting up remote cameras`);
-		log(`Session: ${session_id}`);
-		log(`Origin: ${origin}`);
 
 		// Test health endpoint
 		fetch(`${origin}/api/health`)
@@ -105,7 +131,6 @@
 			debugInfo.connectionStatus = 'Connected ✓';
 			debugInfo.connectionColor = 'lime';
 			socket.emit('join_session', { session_id, role: 'game' });
-			log('Sent join_session as game');
 		});
 
 		socket.on('connect_error', (error: any) => {
@@ -126,7 +151,7 @@
 			debugInfo.connectionColor = 'yellow';
 		});
 
-		// NEW: Listen for processed results instead of raw frames
+		// Listen for processed results instead of raw frames
 		socket.on('result', (data: { cameraId: string; result: any }) => {
 			const { cameraId, result } = data;
 
@@ -238,7 +263,21 @@
 		}
 
 		setupRemoteCameras();
+        
+        // --- Get Audio Reference ---
+        // We get the reference here, but defer calling startMusic() until gameStart event.
+        backgroundMusic = document.getElementById('bgm') as HTMLAudioElement;
+        // ----------------------------------------------------
 	});
+
+    onDestroy(() => {
+        if (socket) {
+            socket.disconnect();
+        }
+        if (backgroundMusic) {
+            backgroundMusic.pause();
+        }
+    });
 </script>
 
 {#if showQRModal}
@@ -246,7 +285,9 @@
 {/if}
 
 <div id="game-root">
-	<Game {input} />
+    <Game {input} on:gameStart={startMusic} />
+    
+        <audio id="bgm" loop preload="auto" src="/audio/background-music.mp3"></audio>
 
 	<!-- Local camera preview (only visible if local is selected) -->
 	{#if selectedCamera === 'local' && useLocalCamera}
@@ -259,7 +300,6 @@
 		></video>
 	{/if}
 
-	<!-- Camera Selector -->
 	{#if useLocalCamera && cameraList.length > 0}
 		<div class="camera-selector">
 			<strong>Active Camera:</strong>
@@ -275,7 +315,6 @@
 		</div>
 	{/if}
 
-	<!-- Bottom Left - Info Container -->
 	<div class="bottom-left-info">
 		<!-- Session Info - Split into left and right -->
 		<div class="remote-indicator">
@@ -293,7 +332,6 @@
 			</div>
 		</div>
 
-		<!-- Debug info -->
 		{#if debug}
 			<div class="debug-overlay">
 				<h3>Debug Info</h3>
@@ -310,3 +348,90 @@
 		{/if}
 	</div>
 </div>
+
+
+<style>
+	/* NOTE: Ensure all other necessary styles are included in your actual main.css */
+
+	.video-overlay {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        width: 160px;
+        height: 120px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        z-index: 5;
+    }
+
+	.camera-preview {
+        /* ensures the video content is visible */
+	}
+	
+	.camera-selector {
+        position: absolute;
+        bottom: 145px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 5;
+	}
+
+	.bottom-left-info {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: white;
+        z-index: 5;
+        font-family: Arial, sans-serif;
+	}
+
+	.remote-indicator {
+        background: rgba(0, 0, 0, 0.7);
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.4;
+	}
+
+    .session-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px; /* Spacing between info and button */
+    }
+
+    .connect-btn {
+        background-color: #ffcc00;
+        color: #000;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s;
+    }
+
+    .connect-btn:hover {
+        background-color: #ffda5a;
+    }
+
+	.debug-overlay {
+        margin-top: 10px;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 12px;
+	}
+    .debug-overlay h3 {
+        margin-top: 0;
+        font-size: 14px;
+        color: #ffcc00;
+    }
+    .debug-overlay p {
+        margin: 4px 0;
+    }
+</style>
