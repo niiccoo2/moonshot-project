@@ -1,7 +1,13 @@
 import type { Handle } from '@sveltejs/kit';
 import { Server } from 'socket.io';
 
-const io = new Server();
+const io = new Server({
+	cors: {
+		origin: '*', // Allow all origins (or specify your domain)
+		methods: ['GET', 'POST']
+	}
+});
+
 const sessions = new Map();
 
 io.on('connection', (socket) => {
@@ -25,10 +31,8 @@ io.on('connection', (socket) => {
 	});
 
 	socket.on('frame', ({ cameraId, blob }) => {
-		// Find which session this camera belongs to
 		for (const [session_id, session] of sessions.entries()) {
 			if (session.cameras.has(cameraId) && session.game) {
-				// Forward frame to the game client with cameraId
 				io.to(session.game).emit('frame', { cameraId, blob });
 			}
 		}
@@ -36,9 +40,7 @@ io.on('connection', (socket) => {
 
 	socket.on('disconnect', () => {
 		console.log('Client disconnected:', socket.id);
-		// Clean up sessions
 		for (const [session_id, session] of sessions.entries()) {
-			// Remove camera
 			for (const [cameraId, socketId] of session.cameras.entries()) {
 				if (socketId === socket.id) {
 					session.cameras.delete(cameraId);
@@ -48,7 +50,6 @@ io.on('connection', (socket) => {
 					}
 				}
 			}
-			// Remove game
 			if (session.game === socket.id) {
 				session.game = null;
 			}
@@ -60,7 +61,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-// Start Socket.IO server
 const PORT = 3001;
 io.listen(PORT);
 console.log(`Socket.IO server running on port ${PORT}`);

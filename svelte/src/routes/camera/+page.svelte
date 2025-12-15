@@ -11,12 +11,29 @@
 	let socket: any;
 	let streaming = false;
 
+	// Get the Socket.IO server URL dynamically
+	const getSocketUrl = () => {
+		// Use the same hostname as the current page, but port 3001
+		const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+		const hostname = window.location.hostname;
+		return `${protocol}://${hostname}:3001`;
+	};
+
 	onMount(async () => {
-		socket = io('http://localhost:3001');
+		const socketUrl = getSocketUrl();
+		console.log('Connecting to:', socketUrl);
+
+		socket = io(socketUrl, {
+			transports: ['websocket', 'polling'] // Try websocket first, fallback to polling
+		});
 
 		socket.on('connect', () => {
 			console.log('Connected to server as camera:', cameraId);
 			socket.emit('join_session', { session_id, role: 'camera', cameraId });
+		});
+
+		socket.on('connect_error', (error: any) => {
+			console.error('Connection error:', error);
 		});
 
 		canvas = document.createElement('canvas');
