@@ -9,14 +9,14 @@
 	let session_id = $page.url.searchParams.get('session') || randomLetters4();
 	let video: HTMLVideoElement;
 	let remoteCameras: Map<string, HTMLImageElement> = new Map();
-	let cameraDisplayUrls: Map<string, string> = new Map(); // Track URLs for display
+	let cameraDisplayUrls: Map<string, string> = new Map();
 	let poseLandmarker: any;
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
 	let socket: any;
 	let useLocalCamera = true;
-	let selectedCamera = 'local'; // 'local' or a specific cameraId
-	let cameraList: string[] = []; // List of available camera IDs
+	let selectedCamera = 'local';
+	let cameraList: string[] = [];
 
 	let input = {
 		jumping: false,
@@ -36,10 +36,20 @@
 		connectionColor: 'gray'
 	};
 
+	// --- Leaderboard State ---
+	type LeaderboardEntry = {
+		id: number;
+		score: number;
+		level: number;
+		date: string;
+	};
+	let leaderboard: LeaderboardEntry[] = [];
+	const MAX_ENTRIES = 5;
+
 	function randomLetters4() {
 		const letters = 'abcdefghijklmnopqrstuvwxyz';
 		const result = new Array(4);
-		const bytes = crypto.getRandomValues(new Uint8Array(4)); // browser
+		const bytes = crypto.getRandomValues(new Uint8Array(4));
 		for (let i = 0; i < 4; i++) {
 			result[i] = letters[bytes[i] % letters.length];
 		}
@@ -48,6 +58,47 @@
 
 	function log(msg: string) {
 		if (debug) console.log(msg);
+	}
+
+	// --- Leaderboard Functions ---
+
+	function loadLeaderboard() {
+		if (typeof localStorage !== 'undefined') {
+			const saved = localStorage.getItem('spaceCowLeaderboard');
+			if (saved) {
+				leaderboard = JSON.parse(saved);
+			}
+		}
+	}
+
+	function saveLeaderboard() {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('spaceCowLeaderboard', JSON.stringify(leaderboard));
+		}
+	}
+
+	function addScoreToLeaderboard(newScore: number, newLevel: number) {
+		const newEntry: LeaderboardEntry = {
+			id: Date.now(),
+			score: newScore,
+			level: newLevel,
+			date: new Date().toLocaleDateString()
+		};
+
+		leaderboard.push(newEntry);
+
+		// Sort by score (descending), then by level (descending)
+		leaderboard.sort((a, b) => {
+			if (b.score !== a.score) {
+				return b.score - a.score;
+			}
+			return b.level - a.level;
+		});
+
+		// Keep only the top MAX_ENTRIES
+		leaderboard = leaderboard.slice(0, MAX_ENTRIES);
+
+		saveLeaderboard();
 	}
 
 	function processResults(poseLandmarkerResult: any) {
@@ -232,6 +283,9 @@
 		});
 
 		log('MediaPipe ready');
+		
+		// Load the leaderboard from local storage
+		loadLeaderboard(); 
 
 		// Always start local camera
 		if (useLocalCamera) {
@@ -243,11 +297,37 @@
 </script>
 
 <div id="game-root">
-	<Game {input} />
+	<Game {input} onGameOver={addScoreToLeaderboard} />
 
-	<!-- Camera preview - shows selected camera -->
+	<div class="leaderboard-overlay">
+		<h3>🏆 Leaderboard</h3>
+		{#if leaderboard.length > 0}
+			<table>
+				<thead>
+					<tr>
+						<th>#</th>
+						<th>Score</th>
+						<th>Level</th>
+						<th>Date</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each leaderboard as entry, i}
+						<tr>
+							<td>{i + 1}</td>
+							<td>{entry.score}</td>
+							<td>{entry.level}</td>
+							<td>{entry.date}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{:else}
+			<p>No scores yet. Be the first!</p>
+		{/if}
+	</div>
+
 	{#if selectedCamera === 'local' && useLocalCamera}
-		<!-- Local camera preview -->
 		<video
 			bind:this={video}
 			autoplay
@@ -257,7 +337,6 @@
 		></video>
 	{/if}
 
-	<!-- Camera Selector -->
 	{#if useLocalCamera && cameraList.length > 0}
 		<div class="camera-selector">
 			<strong>Active Camera:</strong>
@@ -273,9 +352,7 @@
 		</div>
 	{/if}
 
-	<!-- Bottom Left - Info Container -->
 	<div class="bottom-left-info">
-		<!-- Session Info -->
 		<div class="remote-indicator">
 			<strong>Session:</strong>
 			{session_id}
@@ -284,7 +361,6 @@
 			{remoteCameras.size}
 		</div>
 
-		<!-- Debug info -->
 		{#if debug}
 			<div class="debug-overlay">
 				<h3>Debug Info</h3>
@@ -301,3 +377,73 @@
 		{/if}
 	</div>
 </div>
+
+
+<style>
+	/* ... (Existing styles for #game-root, .video-overlay, etc. remain here) ... */
+	
+	.video-overlay {
+		/* ... existing video styles ... */
+	}
+
+	.camera-preview {
+		/* ... existing camera-preview styles ... */
+	}
+	
+	.camera-selector {
+		/* ... existing camera-selector styles ... */
+	}
+
+	.bottom-left-info {
+		/* ... existing bottom-left-info styles ... */
+	}
+
+	.remote-indicator {
+		/* ... existing remote-indicator styles ... */
+	}
+
+	.debug-overlay {
+		/* ... existing debug-overlay styles ... */
+	}
+	
+	/* --- NEW LEADERBOARD STYLES --- */
+	.leaderboard-overlay {
+		position: absolute;
+		top: 20px;
+		left: 20px;
+		background: rgba(0, 0, 0, 0.7);
+		color: white;
+		padding: 15px;
+		border-radius: 10px;
+		max-width: 300px;
+		z-index: 5;
+		box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+	}
+
+	.leaderboard-overlay h3 {
+		margin-top: 0;
+		font-size: 20px;
+		color: #ffcc00;
+	}
+
+	.leaderboard-overlay table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 14px;
+	}
+
+	.leaderboard-overlay th, .leaderboard-overlay td {
+		padding: 5px 10px;
+		text-align: left;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+	}
+
+	.leaderboard-overlay th {
+		color: #aaa;
+		font-weight: bold;
+	}
+
+	.leaderboard-overlay p {
+		font-style: italic;
+	}
+</style>

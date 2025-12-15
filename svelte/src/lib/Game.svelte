@@ -56,6 +56,7 @@
 		movingRight: false,
 		movingLeft: false
 	};
+	export let onGameOver: (score: number, level: number) => void = () => {};
 
 	let showCountdown = false;
 	let countdownText = '';
@@ -182,6 +183,7 @@
 	function gameOver() {
 		game.state = 'gameOver';
 		playDeath();
+		onGameOver(game.score, game.level);
 		finalScore = `Score: ${game.score}`;
 		finalLevel = `Level: ${game.level}`;
 		showGameOver = true;
@@ -428,13 +430,39 @@
 		ctx.stroke();
 	}
 
-	function drawUI() {
-		ctx.fillStyle = '#000';
-		ctx.font = 'bold 32px Arial';
-		ctx.fillText(`Level: ${game.level}`, 20, 50);
-		ctx.fillText(`Score: ${game.score}`, 20, 90);
-		ctx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 130);
+	// File: Game.svelte
+
+function drawUI() {
+	// 1. Draw Level, Score, Speed (Existing: Top Left)
+	ctx.fillStyle = '#000';
+	ctx.font = 'bold 32px Arial';
+	ctx.fillText(`Level: ${game.level}`, 20, 50);
+	ctx.fillText(`Score: ${game.score}`, 20, 90);
+	ctx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 130);
+
+	// 2. Draw Score prominently (New: Top Center)
+	if (game.state === 'playing' || game.state === 'meteor') {
+		const scoreText = `SCORE: ${game.score}`;
+		ctx.font = 'bold 60px Arial';
+		
+		// Measure text width to center it
+		const textWidth = ctx.measureText(scoreText).width;
+		const centerX = (canvas.width / 2) - (textWidth / 2);
+
+		// Use black stroke for readability against the dark background
+		ctx.strokeStyle = '#000';
+		ctx.lineWidth = 8;
+		
+		// Fill color
+		ctx.fillStyle = '#ffcc00'; // Gold/Yellow for score
+
+		// Draw the stroke (outline)
+		ctx.strokeText(scoreText, centerX, 60);
+		
+		// Draw the filled text
+		ctx.fillText(scoreText, centerX, 60);
 	}
+}
 
 	function jump() {
 		if (game.player.grounded && !game.player.crouching) {
@@ -523,7 +551,7 @@
 
 				if (game.obstacles[i].x + game.obstacles[i].width < 0) {
 					game.obstacles.splice(i, 1);
-					game.score++;
+					game.score += 10;
 					game.levelProgress++;
 
 					if (game.levelProgress >= game.levelGoal) {
