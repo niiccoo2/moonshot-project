@@ -5,6 +5,7 @@
 	import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 	import { io } from 'socket.io-client';
 	import '$lib/main.css';
+	import QRCode from '$lib/QR-Code.svelte';
 
 	let session_id = $page.url.searchParams.get('session1') || randomLetters4();
 	let video: HTMLVideoElement;
@@ -288,6 +289,7 @@
     
         <audio id="bgm" loop preload="auto" src="/audio/background-music.mp3"></audio>
 
+	<!-- Local camera preview (only visible if local is selected) -->
 	{#if selectedCamera === 'local' && useLocalCamera}
 		<video
 			bind:this={video}
@@ -303,7 +305,7 @@
 			<strong>Active Camera:</strong>
 			<select
 				bind:value={selectedCamera}
-				on:change={() => log(`Switched to camera: ${selectedCamera}`)}
+				onchange={() => log(`Switched to camera: ${selectedCamera}`)}
 			>
 				<option value="local">Local Camera</option>
 				{#each cameraList as camId}
@@ -314,6 +316,7 @@
 	{/if}
 
 	<div class="bottom-left-info">
+		<!-- Session Info - Split into left and right -->
 		<div class="remote-indicator">
 			<div class="session-content">
 				<div class="session-left">
@@ -324,7 +327,7 @@
 					{remoteCameras.size}
 				</div>
 				<div class="session-right">
-					<button class="connect-btn" on:click={() => (showQRModal = true)}> Connect Camera </button>
+					<button class="connect-btn" onclick={() => (showQRModal = true)}> Connect Camera </button>
 				</div>
 			</div>
 		</div>

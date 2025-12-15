@@ -131,18 +131,6 @@ p {
 	flex-wrap: wrap;
 }
 
-/* Session Info */
-.remote-indicator {
-	font-family: Arial, Helvetica, sans-serif;
-	padding: 12px 16px;
-	background: rgba(0, 0, 0, 0.85);
-	color: white;
-	border-radius: 8px;
-	font-size: 14px;
-	line-height: 1.5;
-	min-width: 200px;
-}
-
 /* Debug Info */
 .debug-overlay {
 	padding: 16px;
@@ -199,5 +187,71 @@ p {
 		font-size: 11px;
 		padding: 8px;
 		min-width: 150px;
+	}
+}
+
+/* Session Info */
+.remote-indicator {
+	font-family: Arial, Helvetica, sans-serif;
+	padding: 12px 16px;
+	background: rgba(0, 0, 0, 0.85);
+	color: white;
+	border-radius: 8px;
+	font-size: 14px;
+	line-height: 1.5;
+	min-width: 200px;
+}
+
+.session-content {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	justify-content: space-between;
+}
+
+.session-left {
+	flex: 1;
+}
+
+.session-right {
+	display: flex;
+	align-items: center;
+}
+
+.connect-btn {
+	padding: 8px 16px;
+	background: #764ba2;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	font-size: 13px;
+	font-weight: bold;
+	cursor: pointer;
+	transition:
+		transform 0.2s,
+		box-shadow 0.2s;
+	white-space: nowrap;
+}
+
+.connect-btn:hover {
+	transform: scale(1.05);
+}
+
+.connect-btn:active {
+	transform: scale(0.95);
+}
+
+/* Responsive: Stack on small screens */
+@media (max-width: 768px) {
+	.session-content {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
+
+	.connect-btn {
+		font-size: 12px;
+		padding: 6px 12px;
+		width: 100%;
 	}
 }
