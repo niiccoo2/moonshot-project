@@ -636,13 +636,13 @@ function drawUI() {
 			ctx.strokeStyle = '#000';
 			ctx.lineWidth = 4;
 			ctx.font = 'bold 72px Arial';
-			const titleX = canvas.width / 2 - 320;
+			const titleX = canvas.width / 2 - 180;
 			const titleY = canvas.height / 2 - 80;
 			ctx.strokeText('MooDash', titleX, titleY);
 			ctx.fillText('MooDash', titleX, titleY);
 			ctx.font = 'bold 36px Arial';
-			ctx.strokeText('Jump to start', canvas.width / 2 - 120, titleY + 60);
-			ctx.fillText('Jump to start', canvas.width / 2 - 120, titleY + 60);
+			ctx.strokeText('Jump to start', canvas.width / 2 - 140, titleY + 60);
+			ctx.fillText('Jump to start', canvas.width / 2 - 140, titleY + 60);
 			ctx.font = '24px Arial';
 			ctx.fillText('Jump IRL to jump | Crouch IRL to crouch', canvas.width / 2 - 240, titleY + 110);
 		}
