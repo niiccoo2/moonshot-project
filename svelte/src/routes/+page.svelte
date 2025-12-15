@@ -257,15 +257,26 @@
 <div id="game-root">
 	<Game {input} />
 
-	<!-- Local camera preview -->
-	{#if useLocalCamera}
+	<!-- Camera preview - shows selected camera -->
+	{#if selectedCamera === 'local' && useLocalCamera}
+		<!-- Local camera preview -->
 		<video
 			bind:this={video}
 			autoplay
 			playsinline
 			style="transform: scaleX(-1);"
-			class="video-overlay local-camera"
+			class="video-overlay camera-preview"
 		></video>
+	{:else if selectedCamera !== 'local' && remoteCameras.has(selectedCamera)}
+		<!-- Remote camera preview -->
+		<div class="video-overlay camera-preview remote-preview">
+			<img
+				src={remoteCameras.get(selectedCamera)?.src || ''}
+				alt="Remote camera"
+				style="transform: scaleX(-1); width: 100%; height: 100%; object-fit: cover;"
+			/>
+			<div class="remote-label">Remote: {selectedCamera}</div>
+		</div>
 	{/if}
 
 	<!-- Remote camera indicator -->
@@ -331,11 +342,30 @@
 		object-fit: cover;
 	}
 
-	.local-camera {
+	.camera-preview {
 		top: 16px;
 		right: 16px;
 		width: 240px;
 		height: 180px;
+	}
+
+	.remote-preview {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.remote-label {
+		position: absolute;
+		bottom: 8px;
+		left: 8px;
+		background: rgba(0, 0, 0, 0.8);
+		color: #0ff;
+		padding: 4px 8px;
+		border-radius: 4px;
+		font-size: 11px;
+		font-family: monospace;
 	}
 
 	.remote-indicator {
