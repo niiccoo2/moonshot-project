@@ -13,8 +13,7 @@
 	let lastProcessTime = 0;
 	const PROCESS_INTERVAL = 200;
 	let socket: any;
-	let useLocalCamera = true; // Always use local camera by default
-	let useRemoteCameras = $page.url.searchParams.get('remote') === 'true';
+	let useLocalCamera = true;
 	let selectedCamera = 'local'; // 'local' or a specific cameraId
 	let cameraList: string[] = []; // List of available camera IDs
 
@@ -261,10 +260,7 @@
 			startLocalVideo();
 		}
 
-		// Also setup remote cameras if requested
-		if (useRemoteCameras) {
-			setupRemoteCameras();
-		}
+		setupRemoteCameras();
 	});
 </script>
 
@@ -294,16 +290,14 @@
 	{/if}
 
 	<!-- Remote camera indicator -->
-	{#if useRemoteCameras}
-		<div class="remote-indicator">
-			📱 Session: {session_id}
-			<br />
-			🎥 Remote Cameras: {remoteCameras.size}
-		</div>
-	{/if}
+	<div class="remote-indicator">
+		📱 Session: {session_id}
+		<br />
+		🎥 Remote Cameras: {remoteCameras.size}
+	</div>
 
 	<!-- Camera Selector -->
-	{#if useLocalCamera && useRemoteCameras && cameraList.length > 0}
+	{#if useLocalCamera && cameraList.length > 0}
 		<div class="camera-selector">
 			<strong>🎮 Active Camera:</strong>
 			<select
@@ -328,9 +322,7 @@
 			<p>Crouching: {debugInfo.crouching ? '✅' : '❌'}</p>
 			<p>Remote Cameras: {debugInfo.remoteCameras}</p>
 			<p>Active Camera: <strong>{selectedCamera}</strong></p>
-			{#if useRemoteCameras}
-				<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
-			{/if}
+			<p style="color: {debugInfo.connectionColor}">Socket: {debugInfo.connectionStatus}</p>
 		</div>
 
 		<!-- Debug log -->
