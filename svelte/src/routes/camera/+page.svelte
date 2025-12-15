@@ -11,20 +11,12 @@
 	let socket: any;
 	let streaming = false;
 
-	// Get the Socket.IO server URL dynamically
-	const getSocketUrl = () => {
-		// Use the same hostname as the current page, but port 3001
-		const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-		const hostname = window.location.hostname;
-		return `${protocol}://${hostname}:3001`;
-	};
-
 	onMount(async () => {
-		const socketUrl = getSocketUrl();
-		console.log('Connecting to:', socketUrl);
+		console.log('Connecting to:', window.location.origin);
 
-		socket = io(socketUrl, {
-			transports: ['websocket', 'polling'] // Try websocket first, fallback to polling
+		socket = io(window.location.origin, {
+			path: '/socket.io',
+			transports: ['websocket', 'polling']
 		});
 
 		socket.on('connect', () => {
@@ -33,7 +25,7 @@
 		});
 
 		socket.on('connect_error', (error: any) => {
-			console.error('Connection error:', error);
+			console.error('Socket connection error:', error);
 		});
 
 		canvas = document.createElement('canvas');

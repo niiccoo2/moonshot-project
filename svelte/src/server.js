@@ -1,9 +1,15 @@
-import type { Handle } from '@sveltejs/kit';
+import { handler } from './build/handler.js';
+import express from 'express';
 import { Server } from 'socket.io';
+import { createServer } from 'http';
 
-const io = new Server({
+const app = express();
+const server = createServer(app);
+
+// Socket.IO setup
+const io = new Server(server, {
 	cors: {
-		origin: '*', // Allow all origins (or specify your domain)
+		origin: '*',
 		methods: ['GET', 'POST']
 	}
 });
@@ -44,7 +50,6 @@ io.on('connection', (socket) => {
 			for (const [cameraId, socketId] of session.cameras.entries()) {
 				if (socketId === socket.id) {
 					session.cameras.delete(cameraId);
-					console.log(`Camera ${cameraId} disconnected from session ${session_id}`);
 					if (session.game) {
 						io.to(session.game).emit('camera_disconnected', cameraId);
 					}
@@ -57,10 +62,10 @@ io.on('connection', (socket) => {
 	});
 });
 
-export const handle: Handle = async ({ event, resolve }) => {
-	return resolve(event);
-};
+// Use SvelteKit handler for all routes
+app.use(handler);
 
-const PORT = 3001;
-io.listen(PORT);
-console.log(`Socket.IO server running on port ${PORT}`);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+	console.log(`Server running on port ${PORT}`);
+});

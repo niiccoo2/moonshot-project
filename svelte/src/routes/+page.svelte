@@ -73,11 +73,20 @@
 
 	function setupRemoteCameras() {
 		console.log('Setting up remote cameras, session:', session_id);
-		socket = io('http://localhost:3001');
+		console.log('Connecting to:', window.location.origin);
+
+		socket = io(window.location.origin, {
+			path: '/socket.io',
+			transports: ['websocket', 'polling']
+		});
 
 		socket.on('connect', () => {
 			console.log('Game connected to server');
 			socket.emit('join_session', { session_id, role: 'game' });
+		});
+
+		socket.on('connect_error', (error: any) => {
+			console.error('Socket connection error:', error);
 		});
 
 		socket.on('frame', (data: { cameraId: string; blob: Blob }) => {
