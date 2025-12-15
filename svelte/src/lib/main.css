@@ -75,21 +75,17 @@ p {
 	font-family: monospace;
 }
 
-/* Top Center - Camera Selector */
+/* Camera Selector in bottom-left info */
 .camera-selector {
-	position: absolute;
-	top: var(--padding);
-	left: 50%;
-	transform: translateX(-50%);
 	padding: 12px 20px;
 	background: rgba(0, 0, 0, 0.85);
 	color: white;
 	border-radius: 8px;
 	font-size: 14px;
-	z-index: 100;
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	margin-bottom: 8px;
 }
 
 .camera-selector select {
@@ -125,10 +121,10 @@ p {
 	left: var(--padding);
 	z-index: 100;
 	display: flex;
-	gap: var(--padding);
-	align-items: flex-end;
+	flex-direction: column;
+	gap: 8px;
+	align-items: flex-start;
 	max-width: calc(100vw - 32px);
-	flex-wrap: wrap;
 }
 
 /* Debug Info */

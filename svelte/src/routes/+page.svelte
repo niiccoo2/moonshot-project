@@ -381,22 +381,21 @@
 		></video>
 	{/if}
 
-	{#if useLocalCamera && cameraList.length > 0}
-		<div class="camera-selector">
-			<strong>Active Camera:</strong>
-			<select
-				bind:value={selectedCamera}
-				onchange={() => log(`Switched to camera: ${selectedCamera}`)}
-			>
-				<option value="local">Local Camera</option>
-				{#each cameraList as camId}
-					<option value={camId}>Remote: {camId}</option>
-				{/each}
-			</select>
-		</div>
-	{/if}
-
 	<div class="bottom-left-info">
+		{#if useLocalCamera && cameraList.length > 0}
+			<div class="camera-selector">
+				<strong>Active Camera:</strong>
+				<select
+					bind:value={selectedCamera}
+					onchange={() => log(`Switched to camera: ${selectedCamera}`)}
+				>
+					<option value="local">Local Camera</option>
+					{#each cameraList as camId}
+						<option value={camId}>Remote: {camId}</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
 		<div class="remote-indicator">
 			<div class="session-content">
 				<div class="session-left">
