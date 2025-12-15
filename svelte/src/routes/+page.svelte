@@ -51,27 +51,28 @@
 	let audio: HTMLAudioElement;
 	let musicStarted = false;
 	// IMPORTANT: Update this path to your actual audio file location.
-	const MUSIC_FILE = '/audio/background-music.mp3'; 
+	const MUSIC_FILE = '/audio/background-music.mp3';
 
 	function startMusic() {
 		if (!musicStarted && typeof audio !== 'undefined' && audio) {
 			audio.loop = true;
-			audio.volume = 0.5; 
-			
+			audio.volume = 0.5;
+
 			const playPromise = audio.play();
 
 			if (playPromise !== undefined) {
-				playPromise.then(_ => {
-					musicStarted = true;
-					log('Background music started.');
-				})
-				.catch(error => {
-					log('Music playback blocked. Awaiting user interaction.');
-				});
+				playPromise
+					.then((_) => {
+						musicStarted = true;
+						log('Background music started.');
+					})
+					.catch((error) => {
+						log('Music playback blocked. Awaiting user interaction.');
+					});
 			}
 		}
 	}
-	
+
 	function tryStartMusic() {
 		if (!musicStarted) {
 			startMusic();
@@ -155,8 +156,8 @@
 			if (pose[12]) {
 				debugInfo.shoulderY = pose[12].y;
 			}
-            // 
-            
+			//
+
 			// Pose-to-Input Logic
 			if (pose[12] && pose[12].y < 0.33) {
 				input.jumping = true;
@@ -189,7 +190,7 @@
 			.catch((e) => log(`Health check failed: ${e.message}`));
 
 		log('Creating Socket.IO connection...');
-		// 
+		//
 		socket = io(origin, {
 			path: '/socket.io',
 			transports: ['polling'],
@@ -332,24 +333,23 @@
 		});
 
 		log('MediaPipe ready');
-		
-		// Load the leaderboard from local storage
-		loadLeaderboard(); 
 
+		// Load the leaderboard from local storage
+		loadLeaderboard();
 		// Always start local camera
 		if (useLocalCamera) {
 			startLocalVideo();
 		}
 
 		setupRemoteCameras();
-		
+
 		// Attach the music start listener
 		document.addEventListener('keydown', handleKeydown);
-		
+
 		// Attempt to start music immediately (will be blocked until user interaction)
 		startMusic();
 	});
-	
+
 	onDestroy(() => {
 		if (typeof document !== 'undefined') {
 			document.removeEventListener('keydown', handleKeydown);
@@ -359,7 +359,7 @@
 
 <div id="game-root">
 	<audio bind:this={audio} src={MUSIC_FILE} preload="auto"></audio>
-	
+
 	<Game {input} onGameOver={addScoreToLeaderboard} />
 
 	<div class="leaderboard-overlay">
@@ -441,10 +441,9 @@
 	</div>
 </div>
 
-
 <style>
 	/* ... (Existing styles for #game-root, .video-overlay, etc. remain here) ... */
-	
+
 	.video-overlay {
 		position: absolute;
 		top: 10px;
@@ -458,10 +457,6 @@
 		box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 	}
 
-	.camera-preview {
-		/* Specific styles for the video element */
-	}
-	
 	.camera-selector {
 		position: absolute;
 		top: 140px;
@@ -506,7 +501,7 @@
 		padding-bottom: 5px;
 		margin-bottom: 5px;
 	}
-	
+
 	/* --- LEADERBOARD STYLES --- */
 	.leaderboard-overlay {
 		position: absolute;
@@ -533,7 +528,8 @@
 		font-size: 14px;
 	}
 
-	.leaderboard-overlay th, .leaderboard-overlay td {
+	.leaderboard-overlay th,
+	.leaderboard-overlay td {
 		padding: 5px 10px;
 		text-align: left;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
