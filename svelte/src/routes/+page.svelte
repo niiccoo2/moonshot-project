@@ -5,7 +5,9 @@
 	import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 	import { io } from 'socket.io-client';
 	import '$lib/main.css';
+	import QRCode from '$lib/QR-Code.svelte';
 
+	let showQRModal: boolean = false;
 	let session_id = $page.url.searchParams.get('session') || randomLetters4();
 	let video: HTMLVideoElement;
 	let remoteCameras: Map<string, HTMLImageElement> = new Map();
@@ -357,6 +359,10 @@
 	});
 </script>
 
+{#if showQRModal}
+	<QRCode {session_id} onClose={() => (showQRModal = false)}></QRCode>
+{/if}
+
 <div id="game-root">
 	<audio bind:this={audio} src={MUSIC_FILE} preload="auto"></audio>
 
@@ -405,7 +411,7 @@
 			<strong>Active Camera:</strong>
 			<select
 				bind:value={selectedCamera}
-				on:change={() => log(`Switched to camera: ${selectedCamera}`)}
+				onchange={() => log(`Switched to camera: ${selectedCamera}`)}
 			>
 				<option value="local">Local Camera</option>
 				{#each cameraList as camId}
@@ -416,12 +422,22 @@
 	{/if}
 
 	<div class="bottom-left-info">
-		<div class="remote-indicator">
-			<strong>Session:</strong>
-			{session_id}
-			<br />
-			<strong>Remote Cameras:</strong>
-			{remoteCameras.size}
+		<div class="session-content">
+			<div class="session-left">
+				<strong>Session:</strong>
+
+				{session_id}
+
+				<br />
+
+				<strong>Remote Cameras:</strong>
+
+				{remoteCameras.size}
+			</div>
+
+			<div class="session-right">
+				<button class="connect-btn" onclick={() => (showQRModal = true)}> Connect Camera </button>
+			</div>
 		</div>
 
 		{#if debug}
@@ -442,8 +458,6 @@
 </div>
 
 <style>
-	/* ... (Existing styles for #game-root, .video-overlay, etc. remain here) ... */
-
 	.video-overlay {
 		position: absolute;
 		top: 10px;
@@ -476,13 +490,13 @@
 		z-index: 5;
 	}
 
-	.remote-indicator {
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		padding: 10px;
-		border-radius: 5px;
-		font-size: 14px;
-	}
+	/* .remote-indicator { */
+	/* background: rgba(0, 0, 0, 0.7); */
+	/* color: white; */
+	/* padding: 10px; */
+	/* border-radius: 5px; */
+	/* font-size: 14px; */
+	/* } */
 
 	.debug-overlay {
 		background: rgba(0, 0, 0, 0.85);
