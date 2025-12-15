@@ -514,7 +514,7 @@ function drawUI() {
 		count();
 	}
 
-	function update() {
+	function update(dt: number) {
 		const GROUND = canvas.height * GROUND_RATIO;
 
 		if (game.state === 'playing') {
@@ -528,9 +528,9 @@ function drawUI() {
 				unCrouch();
 			}
 
-			// Physics
-			game.player.velocityY += 1;
-			game.player.y += game.player.velocityY;
+			// Physics: Multiply changes by dt
+			game.player.velocityY += 1 * dt;
+			game.player.y += game.player.velocityY * dt;
 
 			if (game.player.y >= GROUND - game.player.height) {
 				game.player.y = GROUND - game.player.height;
@@ -538,16 +538,16 @@ function drawUI() {
 				game.player.grounded = true;
 			}
 
-			// Spawn obstacles
-			game.obstacleTimer++;
+			// Spawn obstacles: Increment timer by dt
+			game.obstacleTimer += dt;
 			if (game.obstacleTimer > 800 / game.speed) {
 				spawnObstacle();
 				game.obstacleTimer = 0;
 			}
 
-			// Update obstacles
+			// Update obstacles: Multiply movement by dt
 			for (let i = game.obstacles.length - 1; i >= 0; i--) {
-				game.obstacles[i].x -= game.speed;
+				game.obstacles[i].x -= game.speed * dt;
 
 				if (checkCollision(game.player, game.obstacles[i])) {
 					gameOver();
@@ -569,17 +569,17 @@ function drawUI() {
 		if (game.state === 'meteor') {
 			// Player can move left/right during meteors
 			if (input.movingRight) {
-				game.player.x = Math.min(canvas.width - game.player.width, game.player.x + 10);
+				game.player.x = Math.min(canvas.width - game.player.width, game.player.x + 10 * dt);
 			}
 			if (input.movingLeft) {
-				game.player.x = Math.max(0, game.player.x - 10);
+				game.player.x = Math.max(0, game.player.x - 10 * dt);
 			}
 
 			// Update meteors
 			for (let i = game.meteors.length - 1; i >= 0; i--) {
 				const m = game.meteors[i];
-				m.y += m.speedY;
-				m.x += m.speedX;
+				m.y += m.speedY * dt;
+				m.x += m.speedX * dt;
 
 				if (
 					checkCollision(game.player, {
@@ -691,12 +691,19 @@ function drawUI() {
 
 		resetGame();
 
-		function loop() {
-			update();
+		let lastTime = 0;
+		function loop(currentTime: number) {
+			if (!lastTime) lastTime = currentTime;
+			const deltaTime = currentTime - lastTime;
+			lastTime = currentTime;
+
+			const dt = deltaTime / (1000 / 60);
+
+			update(dt);
 			draw();
 			animationFrame = requestAnimationFrame(loop);
 		}
-		loop();
+		animationFrame = requestAnimationFrame(loop);
 	});
 
 	onDestroy(() => {
@@ -773,3 +780,4 @@ function drawUI() {
 		margin-top: 30px;
 	}
 </style>
+
