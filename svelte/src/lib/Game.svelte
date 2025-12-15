@@ -4,11 +4,6 @@
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D;
 	let animationFrame: number;
-	let socket: any;
-	let video: HTMLVideoElement;
-	let cameraCanvas: HTMLCanvasElement;
-	let cameraCtx: CanvasRenderingContext2D;
-	let cameraInterval: ReturnType<typeof setInterval>;
 	let inputInterval: ReturnType<typeof setInterval>;
 	let stars: { x: number; y: number; r: number }[] = [];
 	let craters: { cx: number; cy: number; radius: number }[] = [];
@@ -61,21 +56,6 @@
 		movingRight: false,
 		movingLeft: false
 	};
-
-	let debugInfo = {
-		baseline: 0,
-		current: 0,
-		diff: 0,
-		bodyDetected: false,
-		baselineReady: false
-	};
-
-	let shoulderYHistory: number[] = [];
-	const BASELINE_SIZE = 45;
-	const DETECTION_SIZE = 3;
-	let currentShoulderY: number[] = [];
-	let baselineEstablished = false;
-	let lastBodyData: any = null;
 
 	let showCountdown = false;
 	let countdownText = '';
@@ -448,90 +428,6 @@
 		ctx.stroke();
 	}
 
-	function drawBodyKeypoints() {
-		if (!lastBodyData || !lastBodyData.body) return;
-
-		const body = lastBodyData.body;
-		const scale = canvas.width;
-
-		function drawPoint(
-			x: number | null,
-			y: number | null,
-			label: string,
-			color: string = '#FF0000'
-		) {
-			if (x === null || y === null) return;
-
-			const px = (1 - x) * scale;
-			const py = y * canvas.height;
-
-			ctx.fillStyle = color;
-			ctx.beginPath();
-			ctx.arc(px, py, 10, 0, Math.PI * 2);
-			ctx.fill();
-
-			ctx.fillStyle = '#FFFFFF';
-			ctx.strokeStyle = '#000000';
-			ctx.lineWidth = 3;
-			ctx.font = 'bold 16px Arial';
-			ctx.strokeText(label, px + 15, py + 5);
-			ctx.fillText(label, px + 15, py + 5);
-		}
-
-		drawPoint(body.head.x, body.head.y, 'HEAD', '#FF00FF');
-		drawPoint(body.left_shoulder.x, body.left_shoulder.y, 'L_SHOULDER', '#00FF00');
-		drawPoint(body.right_shoulder.x, body.right_shoulder.y, 'R_SHOULDER', '#00FF00');
-		drawPoint(body.left_elbow.x, body.left_elbow.y, 'L_ELBOW', '#0000FF');
-		drawPoint(body.right_elbow.x, body.right_elbow.y, 'R_ELBOW', '#0000FF');
-
-		ctx.strokeStyle = '#FFFF00';
-		ctx.lineWidth = 3;
-
-		ctx.beginPath();
-		ctx.moveTo((1 - body.left_shoulder.x) * scale, body.left_shoulder.y * canvas.height);
-		ctx.lineTo((1 - body.right_shoulder.x) * scale, body.right_shoulder.y * canvas.height);
-		ctx.stroke();
-
-		ctx.beginPath();
-		ctx.moveTo((1 - body.left_shoulder.x) * scale, body.left_shoulder.y * canvas.height);
-		ctx.lineTo((1 - body.left_elbow.x) * scale, body.left_elbow.y * canvas.height);
-		ctx.stroke();
-
-		ctx.beginPath();
-		ctx.moveTo((1 - body.right_shoulder.x) * scale, body.right_shoulder.y * canvas.height);
-		ctx.lineTo((1 - body.right_elbow.x) * scale, body.right_elbow.y * canvas.height);
-		ctx.stroke();
-	}
-
-	function drawDebugInfo() {
-		const GROUND = canvas.height * GROUND_RATIO;
-		const debugY = GROUND + 30;
-
-		// Background for debug info
-		ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-		ctx.fillRect(10, debugY, 500, 180);
-
-		// Debug text
-		ctx.fillStyle = '#FFFFFF';
-		ctx.font = 'bold 20px Arial';
-
-		ctx.fillText(`Body Detected: ${debugInfo.bodyDetected ? 'YES' : 'NO'}`, 20, debugY + 30);
-		ctx.fillText(`Baseline Ready: ${debugInfo.baselineReady ? 'YES' : 'NO'}`, 20, debugY + 60);
-		ctx.fillText(`Baseline Y: ${debugInfo.baseline.toFixed(3)}`, 20, debugY + 90);
-		ctx.fillText(`Current Y: ${debugInfo.current.toFixed(3)}`, 20, debugY + 120);
-		ctx.fillText(`Diff: ${debugInfo.diff.toFixed(3)}`, 20, debugY + 150);
-
-		// Status indicators
-		if (input.jumping) {
-			ctx.fillStyle = '#00FF00';
-			ctx.fillText('🔼 JUMPING! ', 300, debugY + 30);
-		}
-		if (input.crouching) {
-			ctx.fillStyle = '#FF6600';
-			ctx.fillText('🔽 CROUCHING!', 300, debugY + 60);
-		}
-	}
-
 	function drawUI() {
 		ctx.fillStyle = '#000';
 		ctx.font = 'bold 32px Arial';
@@ -674,9 +570,6 @@
 	function draw() {
 		drawEnvironment();
 
-		// Draw body keypoints overlay
-		drawBodyKeypoints();
-
 		// Game objects
 		if (game.state === 'playing' || game.state === 'meteor') {
 			drawCow();
@@ -702,12 +595,10 @@
 			}
 
 			drawUI();
-			drawDebugInfo();
 		}
 
 		if (game.state === 'waiting') {
 			drawCow();
-			drawDebugInfo();
 			ctx.fillStyle = '#fff';
 			ctx.strokeStyle = '#000';
 			ctx.lineWidth = 4;
@@ -721,10 +612,6 @@
 			ctx.fillText('Jump to start', canvas.width / 2 - 120, titleY + 60);
 			ctx.font = '24px Arial';
 			ctx.fillText('Jump IRL to jump | Crouch IRL to crouch', canvas.width / 2 - 240, titleY + 110);
-		}
-
-		if (game.state === 'countdown') {
-			drawDebugInfo();
 		}
 	}
 
@@ -754,100 +641,6 @@
 		resizeCanvas();
 		generateEnvironment();
 		window.addEventListener('resize', resizeCanvas);
-
-		// Camera setup
-		video = document.createElement('video');
-		video.autoplay = true;
-		video.playsInline = true;
-		cameraCanvas = document.createElement('canvas');
-		cameraCanvas.width = 320;
-		cameraCanvas.height = 240;
-		cameraCtx = cameraCanvas.getContext('2d')!;
-
-		navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
-			video.srcObject = stream;
-		});
-
-		cameraInterval = setInterval(() => {
-			cameraCtx.drawImage(video, 0, 0, 320, 240);
-			cameraCanvas.toBlob(
-				(blob) => {
-					socket.emit('frame', blob);
-				},
-				'image/jpeg',
-				0.5
-			);
-		}, 66);
-
-		socket.on('result', (data: any) => {
-			const body = data.body;
-			lastBodyData = data;
-
-			if (body && body.left_shoulder && body.right_shoulder) {
-				debugInfo.bodyDetected = true;
-				const avgShoulderY = (body.left_shoulder.y + body.right_shoulder.y) / 2;
-
-				// Only update baseline when standing still (game not playing or in waiting)
-				if (game.state === 'waiting' || game.state === 'countdown') {
-					shoulderYHistory.push(avgShoulderY);
-					if (shoulderYHistory.length > BASELINE_SIZE) {
-						shoulderYHistory.shift();
-					}
-					if (shoulderYHistory.length >= 20) {
-						baselineEstablished = true;
-						debugInfo.baselineReady = true;
-					}
-				}
-
-				// Track current position with smoothing
-				currentShoulderY.push(avgShoulderY);
-				if (currentShoulderY.length > DETECTION_SIZE) {
-					currentShoulderY.shift();
-				}
-
-				if (baselineEstablished && currentShoulderY.length === DETECTION_SIZE) {
-					// Calculate baseline and current averages
-					const baseline = shoulderYHistory.reduce((a, b) => a + b) / shoulderYHistory.length;
-					const current = currentShoulderY.reduce((a, b) => a + b) / currentShoulderY.length;
-
-					// Calculate difference
-					const diff = current - baseline;
-
-					debugInfo.baseline = baseline;
-					debugInfo.current = current;
-					debugInfo.diff = diff;
-
-					// Detect jump - shoulders moved UP (lower Y value)
-					const jumpThreshold = -0.04;
-					input.jumping = diff < jumpThreshold;
-
-					// Detect crouch - shoulders moved DOWN (higher Y value)
-					const crouchThreshold = 0.04;
-					input.crouching = diff > crouchThreshold;
-
-					// Debug output
-					if (input.jumping || input.crouching) {
-						console.log(
-							`Baseline: ${baseline.toFixed(3)}, Current: ${current.toFixed(3)}, Diff: ${diff.toFixed(3)}, Jump: ${input.jumping}, Crouch: ${input.crouching}`
-						);
-					}
-				}
-			} else {
-				debugInfo.bodyDetected = false;
-				input.jumping = false;
-				input.crouching = false;
-			}
-
-			// Detect side-to-side movement using body center
-			if (body && body.left_shoulder && body.right_shoulder) {
-				const bodyX = (body.left_shoulder.x + body.right_shoulder.x) / 2;
-				input.movingRight = bodyX > 0.6;
-				input.movingLeft = bodyX < 0.4;
-			} else {
-				input.movingRight = false;
-				input.movingLeft = false;
-			}
-		});
 
 		inputInterval = setInterval(() => {
 			if (game.state === 'waiting' && input.jumping && !input.prevJumping) {
@@ -879,10 +672,8 @@
 			document.removeEventListener('keydown', handleKeydown);
 			document.removeEventListener('keyup', handleKeyup);
 			cancelAnimationFrame(animationFrame);
-			clearInterval(cameraInterval);
 			clearInterval(inputInterval);
 		}
-		socket?.disconnect();
 	});
 </script>
 
